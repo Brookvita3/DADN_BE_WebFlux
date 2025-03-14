@@ -4,8 +4,13 @@ import QLNKcom.example.QLNK.DTO.LoginRequest;
 import QLNKcom.example.QLNK.DTO.RefreshRequest;
 import QLNKcom.example.QLNK.DTO.RegisterRequest;
 import QLNKcom.example.QLNK.config.jwt.JwtUtils;
+import QLNKcom.example.QLNK.exception.AdafruitException;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
+import QLNKcom.example.QLNK.exception.DataNotFoundException;
+import QLNKcom.example.QLNK.model.User;
+import QLNKcom.example.QLNK.repository.UserRepository;
 import QLNKcom.example.QLNK.response.auth.AuthResponse;
+import QLNKcom.example.QLNK.service.adafruit.AdafruitService;
 import QLNKcom.example.QLNK.service.redis.RedisService;
 import QLNKcom.example.QLNK.service.user.CustomReactiveUserDetailsService;
 import QLNKcom.example.QLNK.service.user.UserService;
@@ -22,40 +27,34 @@ import reactor.core.publisher.Mono;
 public class AuthService {
 
     private final UserService userService;
+    private final AdafruitService adafruitService;
     private final CustomReactiveUserDetailsService customReactiveUserDetailsService;
     private final RedisService redisService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
+    private final UserRepository userRepository;
 
     public Mono<AuthResponse> authenticate(LoginRequest request) {
         return customReactiveUserDetailsService.findByUsername(request.getEmail())
-                .flatMap(user -> {
-                    if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-                        return Mono.error(new BadCredentialsException("Invalid credentials"));
-                    }
-
-                    return jwtUtils.generateAccessToken(user.getUsername())
-                            .zipWith(jwtUtils.generateRefreshToken(user.getUsername()))
-                            .flatMap(tokens -> jwtUtils.extractRefreshIat(tokens.getT2())
-                                    .flatMap(iatSeconds -> redisService.saveRefreshTokenIat(user.getUsername(), iatSeconds.getTime() / 1000))
-                                    .thenReturn(new AuthResponse(tokens.getT1(), tokens.getT2()))
-                            )
-                            .doOnError(error -> System.err.println("❌ Error in login flow: " + error.getMessage()));
-                });
+                .filter(userDetails -> passwordEncoder.matches(request.getPassword(), userDetails.getPassword()))
+                .switchIfEmpty(Mono.error(new BadCredentialsException("Invalid credentials")))
+                .flatMap(userDetails -> userRepository.findByEmail(request.getEmail())
+                        .switchIfEmpty(Mono.error(new DataNotFoundException("User not found in database", HttpStatus.NOT_FOUND)))
+                )
+                .flatMap(this::generateTokensAndCache)  // ✅ Trả về Mono<AuthResponse>
+                .flatMap(response -> userRepository.findByEmail(request.getEmail())
+                        .flatMap(user -> fetchAndStoreFeeds(response, user))
+                .doOnError(error -> System.err.println("❌ Error in login flow: " + error.getMessage()))
+                );
     }
 
-    public Mono<Void> register(RegisterRequest request) {
+    public Mono<AuthResponse> register(RegisterRequest request) {
         return userService.findByEmail(request.getEmail())
                 .flatMap(existingUser -> Mono.error(new CustomAuthException("Email already in use", HttpStatus.BAD_REQUEST)))
                 .switchIfEmpty(Mono.defer(() -> userService.createUser(request)
-                        .flatMap(user -> jwtUtils.generateAccessToken(user.getEmail())
-                                .zipWith(jwtUtils.generateRefreshToken(user.getEmail()))
-                                .flatMap(tokens -> jwtUtils.extractRefreshIat(tokens.getT2())
-                                        .flatMap(iatSeconds -> redisService.saveRefreshTokenIat(user.getEmail(), iatSeconds.getTime() / 1000))
-                                )
-                        )
+                        .flatMap(this::generateTokensAndCache)
                 ))
-                .then()
+                .cast(AuthResponse.class)
                 .doOnError(error -> System.err.println("❌ Error in register flow: " + error.getMessage()));
     }
 
@@ -85,6 +84,25 @@ public class AuthService {
                                         .map(accessToken -> new AuthResponse(accessToken, refreshToken));
                             });
                 });
+    }
+
+    private Mono<AuthResponse> generateTokensAndCache(User user) {
+        return jwtUtils.generateAccessToken(user.getEmail())
+                .zipWhen(accessToken -> jwtUtils.generateRefreshToken(user.getEmail()))
+                .flatMap(tokens -> jwtUtils.extractRefreshIat(tokens.getT2())
+                        .flatMap(iatSeconds -> redisService.saveRefreshTokenIat(user.getEmail(), iatSeconds.getTime() / 1000))
+                        .thenReturn(new AuthResponse(tokens.getT1(), tokens.getT2()))
+                );
+    }
+
+    private Mono<AuthResponse> fetchAndStoreFeeds(AuthResponse response, User user) {
+        return adafruitService.getUserFeeds(user.getUsername(), user.getApikey())
+                .flatMap(feeds -> {
+                    user.setFeeds(feeds);
+                    return userRepository.save(user);
+                })
+                .thenReturn(response)
+                .onErrorMap(error -> new AdafruitException("Exception in connect to Adafruit", HttpStatus.BAD_REQUEST));
     }
 
 }

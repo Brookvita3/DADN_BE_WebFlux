@@ -1,5 +1,6 @@
 package QLNKcom.example.QLNK.exception.handler;
 
+import QLNKcom.example.QLNK.exception.AdafruitException;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.exception.DataNotFoundException;
 import QLNKcom.example.QLNK.response.ResponseObject;
@@ -7,8 +8,8 @@ import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
 import reactor.core.publisher.Mono;
@@ -70,6 +71,28 @@ public class GlobalExceptionHandler {
                 .build();
 
         return Mono.just(ResponseEntity.badRequest().body(response));
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public Mono<ResponseEntity<ResponseObject>> handleBadCredentialException(Exception ex) {
+        ResponseObject response = ResponseObject.builder()
+                .message("Invalid email or password")
+                .status(HttpStatus.BAD_REQUEST.value())
+                .data(ex)
+                .build();
+
+        return Mono.just(ResponseEntity.internalServerError().body(response));
+    }
+
+    @ExceptionHandler(AdafruitException.class)
+    public Mono<ResponseEntity<ResponseObject>> handleAdafruitException(Exception ex) {
+        ResponseObject response = ResponseObject.builder()
+                .message("Invalid username, please check your username on Adafruit")
+                .status(HttpStatus.BAD_REQUEST.value())
+                .data(ex)
+                .build();
+
+        return Mono.just(ResponseEntity.internalServerError().body(response));
     }
 
     @ExceptionHandler(Exception.class)
