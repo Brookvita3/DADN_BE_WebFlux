@@ -1,6 +1,7 @@
 package QLNKcom.example.QLNK.controller.mqtt;
 
 import QLNKcom.example.QLNK.config.jwt.JwtUtils;
+import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.response.ResponseObject;
 import QLNKcom.example.QLNK.service.mqtt.MqttService;
 import QLNKcom.example.QLNK.service.user.UserService;
@@ -24,11 +25,40 @@ public class MqttController {
 
     @PostMapping("/subscribe")
     public Mono<ResponseEntity<ResponseObject>> subscribe(ServerHttpRequest request) {
-        return jwtUtils.extractToken(request)
-                .flatMap(jwtUtils::extractAccessEmail)
-                .flatMap(userService::findByEmail)
-                .flatMap(mqttService::subscribeFeed)
-                .thenReturn(new ResponseObject("Subscribed successfully!", HttpStatus.OK.value(), null))
-                .map(response -> ResponseEntity.ok().body(response));
+        return Mono.defer(() -> {
+            try {
+                String token = jwtUtils.extractToken(request);
+                String email = jwtUtils.extractAccessEmail(token);
+                return userService.findByEmail(email)
+                        .flatMap(mqttService::subscribeUserFeeds)
+                        .thenReturn(ResponseEntity.ok(new ResponseObject("Subscribed successfully!", HttpStatus.OK.value(), null)));
+            } catch (CustomAuthException e) {
+                return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(new ResponseObject(e.getMessage(), HttpStatus.UNAUTHORIZED.value(), null)));
+            } catch (Exception e) {
+                return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(new ResponseObject("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR.value(), null)));
+            }
+        });
     }
+
+    @PostMapping("/unsubscribe")
+    public Mono<ResponseEntity<ResponseObject>> unSubscribe(ServerHttpRequest request) {
+        return Mono.defer(() -> {
+            try {
+                String token = jwtUtils.extractToken(request);
+                String email = jwtUtils.extractAccessEmail(token);
+                return userService.findByEmail(email)
+                        .flatMap(mqttService::unsubscribeUserFeeds)
+                        .thenReturn(ResponseEntity.ok(new ResponseObject("Unsubscribed successfully!", HttpStatus.OK.value(), null)));
+            } catch (CustomAuthException e) {
+                return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(new ResponseObject(e.getMessage(), HttpStatus.UNAUTHORIZED.value(), null)));
+            } catch (Exception e) {
+                return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(new ResponseObject("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR.value(), null)));
+            }
+        });
+    }
+
 }

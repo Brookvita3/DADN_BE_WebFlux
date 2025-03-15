@@ -43,96 +43,85 @@ public class JwtUtils {
         this.refreshKey = Keys.hmacShaKeyFor(bytes_refresh);
     }
 
-    public Mono<String> generateAccessToken(String email) {
-        return Mono.fromCallable(() ->
-                Jwts.builder()
-                        .subject(email)
-                        .claim("role", "USER")
-                        .issuedAt(new Date())
-                        .expiration(new Date(System.currentTimeMillis() + accessExpirationTime))
-                        .signWith(accessKey)
-                        .compact()
-        );
+    public String generateAccessToken(String email) {
+        return Jwts.builder()
+                .subject(email)
+                .claim("role", "USER")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + accessExpirationTime))
+                .signWith(accessKey)
+                .compact();
     }
 
-    public Mono<String> generateRefreshToken(String email) {
-        return Mono.fromCallable(() ->
-                Jwts.builder()
-                        .subject(email)
-                        .claim("role", "USER")
-                        .issuedAt(new Date())
-                        .expiration(new Date(System.currentTimeMillis() + refreshExpirationTime))
-                        .signWith(refreshKey)
-                        .compact()
-        );
+    public String generateRefreshToken(String email) {
+        return Jwts.builder()
+                .subject(email)
+                .claim("role", "USER")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + refreshExpirationTime))
+                .signWith(refreshKey)
+                .compact();
     }
 
-    public Mono<Claims> extractAccessClaims(String token) {
-        return Mono.fromCallable(() ->
-                Jwts.parser()
-                        .verifyWith(accessKey)
-                        .build()
-                        .parseSignedClaims(token)
-                        .getPayload()
-        ).onErrorMap(e -> {
+    public Claims extractAccessClaims(String token) {
+        try {
+            return Jwts.parser()
+                    .verifyWith(accessKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        } catch (Exception e) {
             log.error("Payload access is not valid: {}", e.getMessage());
-            return new CustomAuthException("Payload access is not valid", HttpStatus.UNAUTHORIZED);
-        });
+            throw new CustomAuthException("Payload access is not valid", HttpStatus.UNAUTHORIZED);
+        }
     }
 
-    public Mono<String> extractAccessEmail(String token) {
-        return extractAccessClaims(token).map(Claims::getSubject);
+    public String extractAccessEmail(String token) {
+        return extractAccessClaims(token).getSubject();
     }
 
-    public Mono<Date> extractAccessIat(String token) {
-        return extractAccessClaims(token).map(Claims::getIssuedAt);
+    public Date extractAccessIat(String token) {
+        return extractAccessClaims(token).getIssuedAt();
     }
 
-    public Mono<Boolean> validateAccessToken(String accessToken, Long refreshTokenIatSeconds) {
-        return extractAccessIat(accessToken)
-                .flatMap(accessIat -> {
-                    long accessIatSeconds = accessIat.getTime() / 1000;
-                    return Mono.just(accessIatSeconds >= refreshTokenIatSeconds);
-                })
-                .defaultIfEmpty(false);
+    public boolean validateAccessToken(String accessToken, Long refreshTokenIatSeconds) {
+        Date accessIat = extractAccessIat(accessToken);
+        long accessIatSeconds = accessIat.getTime() / 1000;
+        return accessIatSeconds >= refreshTokenIatSeconds;
     }
 
-    public Mono<Claims> extractRefreshClaims(String token) {
-        return Mono.fromCallable(() ->
-                Jwts.parser()
-                        .verifyWith(refreshKey)
-                        .build()
-                        .parseSignedClaims(token)
-                        .getPayload()
-        ).onErrorMap(e -> {
+    public Claims extractRefreshClaims(String token) {
+        try {
+            return Jwts.parser()
+                    .verifyWith(refreshKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        } catch (Exception e) {
             log.error("Payload refresh is not valid: {}", e.getMessage());
-            return new CustomAuthException("Payload refresh is not valid", HttpStatus.UNAUTHORIZED);
-        });
+            throw new CustomAuthException("Payload refresh is not valid", HttpStatus.UNAUTHORIZED);
+        }
     }
 
-    public Mono<String> extractRefreshEmail(String token) {
-        return extractRefreshClaims(token).map(Claims::getSubject);
+    public String extractRefreshEmail(String token) {
+        return extractRefreshClaims(token).getSubject();
     }
 
-    public Mono<Date> extractRefreshIat(String token) {
-        return extractRefreshClaims(token).map(Claims::getIssuedAt);
+    public Date extractRefreshIat(String token) {
+        return extractRefreshClaims(token).getIssuedAt();
     }
 
-    public Mono<Boolean> validateRefreshToken(String refreshToken, Long refreshIatRedis) {
-        return extractRefreshIat(refreshToken)
-                .flatMap(refreshIat -> {
-                    long refreshTokenIatSeconds = refreshIat.getTime() / 1000;
-                    return Mono.just(refreshTokenIatSeconds == refreshIatRedis);
-                })
-                .defaultIfEmpty(false);
+    public boolean validateRefreshToken(String refreshToken, Long refreshIatRedis) {
+        long refreshTokenIatSeconds = extractRefreshIat(refreshToken).getTime() / 1000;
+        return refreshTokenIatSeconds == refreshIatRedis;
     }
 
-    public Mono<String> extractToken(ServerHttpRequest request) {
-        return Mono.justOrEmpty(request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION))
-                .doOnNext(authHeader -> log.info("🔑 Received Auth Header: {}", authHeader))
-                .filter(authHeader -> authHeader.startsWith("Bearer "))
-                .map(authHeader -> authHeader.substring(7))
-                .switchIfEmpty(Mono.error(new CustomAuthException("Missing or invalid Authorization header", HttpStatus.BAD_REQUEST)));
+    public String extractToken(ServerHttpRequest request) {
+        String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new CustomAuthException("Missing or invalid Authorization header", HttpStatus.BAD_REQUEST);
+        }
+        return authHeader.substring(7);
     }
 
 }

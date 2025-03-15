@@ -41,17 +41,22 @@ public class JwtAuthenticationFilter implements WebFilter {
             return chain.filter(exchange);
         }
 
-        return jwtUtils.extractAccessEmail(accessToken)
-                .flatMap(email -> validateTokenAndSetSecurityContext(email, accessToken))
-                .flatMap(securityContext -> chain.filter(exchange)
-                        .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(securityContext))))
-                .onErrorResume(CustomAuthException.class, ex -> handleAuthException(exchange, ex));
+        return Mono.defer(() -> {
+            String email = jwtUtils.extractAccessEmail(accessToken); // ✅ Gọi trong defer để giữ reactive
+            return validateTokenAndSetSecurityContext(email, accessToken)
+                    .flatMap(securityContext -> chain.filter(exchange)
+                            .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(securityContext))));
+        }).onErrorResume(CustomAuthException.class, ex -> handleAuthException(exchange, ex));
+
     }
 
     private Mono<SecurityContext> validateTokenAndSetSecurityContext(String email, String accessToken) {
-        return getRefreshTokenIat(email)
-                .flatMap(refreshTokenIat -> jwtUtils.validateAccessToken(accessToken, refreshTokenIat / 1000))
-                .flatMap(isValid -> isValid ? createSecurityContext(email) : Mono.error(new CustomAuthException("Invalid token", HttpStatus.UNAUTHORIZED)));
+        return getRedisRefreshTokenIat(email)
+                .flatMap(refreshTokenIat -> Mono.fromCallable(() ->
+                        jwtUtils.validateAccessToken(accessToken, refreshTokenIat / 1000)
+                ))
+                .flatMap(isValid -> isValid ? createSecurityContext(email)
+                        : Mono.error(new CustomAuthException("Invalid token", HttpStatus.UNAUTHORIZED)));
     }
 
     private Mono<SecurityContext> createSecurityContext(String email) {
@@ -59,7 +64,7 @@ public class JwtAuthenticationFilter implements WebFilter {
                 .map(user -> new SecurityContextImpl(new UsernamePasswordAuthenticationToken(user, null, List.of(new SimpleGrantedAuthority("ROLE_USER")))));
     }
 
-    private Mono<Long> getRefreshTokenIat(String email) {
+    private Mono<Long> getRedisRefreshTokenIat(String email) {
         return redisTemplate.opsForValue()
                 .get("refresh:iat:" + email)
                 .map(Long::parseLong)

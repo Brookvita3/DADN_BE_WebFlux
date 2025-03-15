@@ -20,6 +20,7 @@ public class MqttClientFactory {
         mqttConnectOptions.setServerURIs(new String[]{brokerUrl});
         mqttConnectOptions.setUserName(username);
         mqttConnectOptions.setPassword(apiKey.toCharArray());
+        mqttConnectOptions.setKeepAliveInterval(60);
 
         factory.setConnectionOptions(mqttConnectOptions);
         return factory;
