@@ -1,22 +1,22 @@
 package QLNKcom.example.QLNK.config.jwt;
 
-import QLNKcom.example.QLNK.controller.auth.AuthController;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.response.ResponseObject;
+import QLNKcom.example.QLNK.service.user.CustomReactiveUserDetailsService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextImpl;
-import org.springframework.security.web.server.context.ServerSecurityContextRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
@@ -27,60 +27,64 @@ import java.util.List;
 import java.util.Optional;
 
 @Component
-@AllArgsConstructor
+@Slf4j
+@RequiredArgsConstructor
 public class JwtAuthenticationFilter implements WebFilter {
 
     private final JwtUtils jwtUtils;
     private final ReactiveRedisTemplate<String, String> redisTemplate;
-    private final ServerSecurityContextRepository securityContextRepository;
-    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+    private final CustomReactiveUserDetailsService customReactiveUserDetailsService;
 
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
-        ServerHttpRequest request = exchange.getRequest();
-        String accessToken = extractAccessTokenFromRequest(request);
-
+        String accessToken = extractAccessToken(exchange.getRequest());
         if (accessToken == null) {
             return chain.filter(exchange);
         }
 
         return jwtUtils.extractAccessEmail(accessToken)
-                .flatMap(email -> getRefreshTokenIat(email)
-                        .flatMap(refreshTokenIat -> jwtUtils.validateAccessToken(accessToken, refreshTokenIat)
-                                .flatMap(isValid -> isValid ? setSecurityContext(exchange, email) : Mono.empty())
-                        )
-                )
-                .onErrorResume(CustomAuthException.class, ex -> {
-                    log.error("JWT validation failed: {}", ex.getMessage());
-                    exchange.getResponse().setStatusCode(ex.getHttpStatus());
-                    return exchange.getResponse()
-                            .writeWith(Mono.just(exchange.getResponse()
-                                    .bufferFactory()
-                                    .wrap(serializeResponseObject(ex))));
-                })
-                .switchIfEmpty(chain.filter(exchange));
+                .flatMap(email -> validateTokenAndSetSecurityContext(exchange, chain, email, accessToken))
+                .onErrorResume(CustomAuthException.class, ex -> handleAuthException(exchange, ex))
+                .then(chain.filter(exchange));
+    }
+
+    private Mono<Void> validateTokenAndSetSecurityContext(ServerWebExchange exchange, WebFilterChain chain, String email, String accessToken) {
+        return getRefreshTokenIat(email)
+                .flatMap(refreshTokenIat -> jwtUtils.validateAccessToken(accessToken, refreshTokenIat / 1000))
+                .flatMap(isValid -> isValid ? setSecurityContext(exchange, chain, email) : Mono.empty());
     }
 
     private Mono<Long> getRefreshTokenIat(String email) {
         return redisTemplate.opsForValue()
                 .get("refresh:iat:" + email)
                 .map(Long::parseLong)
-                .switchIfEmpty(Mono.error(  new CustomAuthException("Access token is revoke", HttpStatus.UNAUTHORIZED)));
+                .switchIfEmpty(Mono.error(new CustomAuthException("Access token is revoked", HttpStatus.UNAUTHORIZED)));
     }
 
-    private Mono<Void> setSecurityContext(ServerWebExchange exchange, String email) {
-        SecurityContext context = new SecurityContextImpl(
-                new UsernamePasswordAuthenticationToken(email, null, List.of())
-        );
-        return securityContextRepository.save(exchange, context).then();
+    private Mono<Void> setSecurityContext(ServerWebExchange exchange, WebFilterChain chain, String email) {
+        return customReactiveUserDetailsService.findByUsername(email)
+                .flatMap(user -> {
+                    Authentication authentication = new UsernamePasswordAuthenticationToken(user, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+                    SecurityContext securityContext = new SecurityContextImpl(authentication);
+                    return chain.filter(exchange)
+                            .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(securityContext)));
+                });
     }
 
-    private String extractAccessTokenFromRequest(ServerHttpRequest request) {
+    private String extractAccessToken(ServerHttpRequest request) {
         return Optional.ofNullable(request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION))
                 .filter(authHeader -> authHeader.startsWith("Bearer "))
                 .map(authHeader -> authHeader.substring(7))
                 .orElse(null);
+    }
+
+    private Mono<Void> handleAuthException(ServerWebExchange exchange, CustomAuthException ex) {
+        exchange.getResponse().setStatusCode(ex.getHttpStatus());
+        return exchange.getResponse()
+                .writeWith(Mono.just(exchange.getResponse()
+                        .bufferFactory()
+                        .wrap(serializeResponseObject(ex))));
     }
 
     private byte[] serializeResponseObject(CustomAuthException ex) {

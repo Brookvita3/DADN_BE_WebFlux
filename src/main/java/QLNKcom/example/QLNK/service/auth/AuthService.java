@@ -73,11 +73,12 @@ public class AuthService {
         return jwtUtils.extractRefreshClaims(refreshToken)
                 .flatMap(claims -> {
                     String email = claims.getSubject();
-                    long tokenIat = claims.getIssuedAt().getTime() / 1000;
+                    long tokenIatSecond = claims.getIssuedAt().getTime() / 1000;
 
                     return redisService.getRefreshTokenIat(email)
+                            .switchIfEmpty(Mono.error(new CustomAuthException("Invalid or revoked refresh token", HttpStatus.UNAUTHORIZED)))
                             .flatMap(savedIat -> {
-                                if (!savedIat.equals(tokenIat)) {
+                                if (!savedIat.equals(tokenIatSecond)) {
                                     return Mono.error(new CustomAuthException("Invalid or revoked refresh token", HttpStatus.UNAUTHORIZED));
                                 }
                                 return jwtUtils.generateAccessToken(email)

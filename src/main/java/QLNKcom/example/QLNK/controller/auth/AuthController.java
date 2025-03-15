@@ -26,7 +26,7 @@ public class AuthController {
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
     @PostMapping("/login")
-    public Mono<ResponseEntity<?>> login(@Valid @RequestBody LoginRequest request) {
+    public Mono<ResponseEntity<ResponseObject>> login(@Valid @RequestBody LoginRequest request) {
         return authService.authenticate(request)
                 .map(authResponse -> ResponseObject.builder()
                         .message("Login successfully")

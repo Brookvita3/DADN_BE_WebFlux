@@ -129,6 +129,7 @@ public class JwtUtils {
 
     public Mono<String> extractToken(ServerHttpRequest request) {
         return Mono.justOrEmpty(request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION))
+                .doOnNext(authHeader -> log.info("🔑 Received Auth Header: {}", authHeader))
                 .filter(authHeader -> authHeader.startsWith("Bearer "))
                 .map(authHeader -> authHeader.substring(7))
                 .switchIfEmpty(Mono.error(new CustomAuthException("Missing or invalid Authorization header", HttpStatus.BAD_REQUEST)));
