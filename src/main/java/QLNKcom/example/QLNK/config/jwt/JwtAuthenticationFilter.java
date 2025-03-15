@@ -12,7 +12,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
@@ -35,7 +34,6 @@ public class JwtAuthenticationFilter implements WebFilter {
     private final ReactiveRedisTemplate<String, String> redisTemplate;
     private final CustomReactiveUserDetailsService customReactiveUserDetailsService;
 
-
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String accessToken = extractAccessToken(exchange.getRequest());
@@ -44,15 +42,21 @@ public class JwtAuthenticationFilter implements WebFilter {
         }
 
         return jwtUtils.extractAccessEmail(accessToken)
-                .flatMap(email -> validateTokenAndSetSecurityContext(exchange, chain, email, accessToken))
-                .onErrorResume(CustomAuthException.class, ex -> handleAuthException(exchange, ex))
-                .then(chain.filter(exchange));
+                .flatMap(email -> validateTokenAndSetSecurityContext(email, accessToken))
+                .flatMap(securityContext -> chain.filter(exchange)
+                        .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(securityContext))))
+                .onErrorResume(CustomAuthException.class, ex -> handleAuthException(exchange, ex));
     }
 
-    private Mono<Void> validateTokenAndSetSecurityContext(ServerWebExchange exchange, WebFilterChain chain, String email, String accessToken) {
+    private Mono<SecurityContext> validateTokenAndSetSecurityContext(String email, String accessToken) {
         return getRefreshTokenIat(email)
                 .flatMap(refreshTokenIat -> jwtUtils.validateAccessToken(accessToken, refreshTokenIat / 1000))
-                .flatMap(isValid -> isValid ? setSecurityContext(exchange, chain, email) : Mono.empty());
+                .flatMap(isValid -> isValid ? createSecurityContext(email) : Mono.error(new CustomAuthException("Invalid token", HttpStatus.UNAUTHORIZED)));
+    }
+
+    private Mono<SecurityContext> createSecurityContext(String email) {
+        return customReactiveUserDetailsService.findByUsername(email)
+                .map(user -> new SecurityContextImpl(new UsernamePasswordAuthenticationToken(user, null, List.of(new SimpleGrantedAuthority("ROLE_USER")))));
     }
 
     private Mono<Long> getRefreshTokenIat(String email) {
@@ -60,16 +64,6 @@ public class JwtAuthenticationFilter implements WebFilter {
                 .get("refresh:iat:" + email)
                 .map(Long::parseLong)
                 .switchIfEmpty(Mono.error(new CustomAuthException("Access token is revoked", HttpStatus.UNAUTHORIZED)));
-    }
-
-    private Mono<Void> setSecurityContext(ServerWebExchange exchange, WebFilterChain chain, String email) {
-        return customReactiveUserDetailsService.findByUsername(email)
-                .flatMap(user -> {
-                    Authentication authentication = new UsernamePasswordAuthenticationToken(user, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
-                    SecurityContext securityContext = new SecurityContextImpl(authentication);
-                    return chain.filter(exchange)
-                            .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(securityContext)));
-                });
     }
 
     private String extractAccessToken(ServerHttpRequest request) {
