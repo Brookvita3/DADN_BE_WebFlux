@@ -3,8 +3,9 @@ package QLNKcom.example.QLNK.service.mqtt;
 import QLNKcom.example.QLNK.model.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.integration.mqtt.core.MqttPahoClientFactory;
 import org.springframework.integration.mqtt.inbound.MqttPahoMessageDrivenChannelAdapter;
-import org.springframework.integration.mqtt.support.DefaultPahoMessageConverter;
+import org.springframework.integration.mqtt.outbound.MqttPahoMessageHandler;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -17,8 +18,11 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class MqttSubscriptionManager {
     private final MqttClientFactory mqttClientFactory;
+    private final MqttAdapterFactory mqttAdapterFactory;
     private final MqttMessageHandler mqttMessageHandler;
     private final Map<String, MqttPahoMessageDrivenChannelAdapter> activeSubscribers = new ConcurrentHashMap<>();
+    private final Map<String, MqttPahoMessageHandler> activeHandlers = new ConcurrentHashMap<>();
+
 
     public Mono<Void> subscribeFeed(User user, List<String> feeds) {
         return Mono.fromRunnable(() -> {
@@ -35,19 +39,16 @@ public class MqttSubscriptionManager {
             }
 
             try {
-                MqttPahoMessageDrivenChannelAdapter adapter = new MqttPahoMessageDrivenChannelAdapter(
-                        clientId,
-                        mqttClientFactory.createMqttClientFactory(user.getUsername(), user.getApikey()),
-                        feeds.toArray(new String[0])
-                );
+                MqttPahoClientFactory client = mqttClientFactory.createMqttClient(user.getUsername(), user.getApikey());
 
-                adapter.setQos(1);
-                adapter.setConverter(new DefaultPahoMessageConverter());
+                MqttPahoMessageDrivenChannelAdapter adapter = mqttAdapterFactory.createMqttAdapter(user, client, feeds);
+                adapter.start();
 
+                MqttPahoMessageHandler messageHandler = mqttMessageHandler.createMessageHandler(user, client);
                 mqttMessageHandler.attachHandler(adapter, user);
 
-                adapter.start();
                 activeSubscribers.put(clientId, adapter);
+                activeHandlers.put(clientId, messageHandler);
 
                 log.info("✅ Subscribed user {} to feeds: {}", user.getUsername(), feeds);
             }
@@ -69,4 +70,23 @@ public class MqttSubscriptionManager {
             }
         });
     }
+
+    public Mono<MqttPahoMessageDrivenChannelAdapter> getMqttAdapter(String userId) {
+        MqttPahoMessageDrivenChannelAdapter adapter = activeSubscribers.get("mqtt-" + userId);
+        if (adapter == null) {
+            log.warn("❌ No active MQTT adapter found for user {}", userId);
+            return Mono.empty();
+        }
+        return Mono.just(adapter);
+    }
+
+    public Mono<MqttPahoMessageHandler> getMqttMessageHandler(String userId) {
+        MqttPahoMessageHandler messageHandler = activeHandlers.get("mqtt-" + userId);
+        if (messageHandler == null) {
+            log.warn("❌ No active MQTT client found for user {}", userId);
+            return Mono.empty();
+        }
+        return Mono.just(messageHandler);
+    }
+
 }

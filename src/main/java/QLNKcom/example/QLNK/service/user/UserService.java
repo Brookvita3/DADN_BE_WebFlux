@@ -19,6 +19,11 @@ public class UserService {
         return userRepository.findByEmail(email);
     }
 
+    public Mono<User> findById(String userId) {
+        System.out.println("🚀 Finding user: " + userId);
+        return userRepository.findById(userId);
+    }
+
     public Mono<User> saveUser(User user) {
         System.out.println("🚀 Saving user: " + user.getEmail());
         return userRepository.save(user);

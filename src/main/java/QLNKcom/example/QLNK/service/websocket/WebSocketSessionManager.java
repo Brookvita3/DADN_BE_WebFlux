@@ -18,15 +18,33 @@ public class WebSocketSessionManager {
     }
 
     public void removeSession(String userId) {
-        userSinks.remove(userId);
+        Sinks.Many<String> sink = userSinks.remove(userId);
+        if (sink != null) {
+            sink.tryEmitComplete();
+        }
     }
 
     public void sendToUser(String userId, String message) {
         if (userSinks.containsKey(userId)) {
+            Sinks.Many<String> sink = userSinks.get(userId);
+
+            long subscribers = sink.currentSubscriberCount();
+            if (subscribers == 0) {
+                log.warn("⚠️ No active WebSocket subscribers for user {}", userId);
+                return;
+            }
+
             log.info("📤 Sending WebSocket message to user {}: {}", userId, message);
-            userSinks.get(userId).tryEmitNext(message);
+            Sinks.EmitResult result = sink.tryEmitNext(message);
+
+            if (result.isFailure()) {
+                log.error("❌ Failed to send WebSocket message to user {}: {}", userId, result);
+            }
+        } else {
+            log.warn("❌ No sink found for user {}", userId);
         }
     }
+
 
     public Flux<String> getUserFlux(String userId) {
         return userSinks.computeIfAbsent(userId, key -> Sinks.many().multicast().onBackpressureBuffer()).asFlux();

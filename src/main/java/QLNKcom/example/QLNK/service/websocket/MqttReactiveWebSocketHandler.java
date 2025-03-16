@@ -2,13 +2,17 @@ package QLNKcom.example.QLNK.service.websocket;
 
 import QLNKcom.example.QLNK.config.jwt.JwtUtils;
 import QLNKcom.example.QLNK.model.User;
+import QLNKcom.example.QLNK.service.mqtt.MqttService;
 import QLNKcom.example.QLNK.service.user.UserService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketSession;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Component
@@ -19,6 +23,7 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
     private final WebSocketSessionManager sessionManager;
     private final ReactiveRedisTemplate<String, String> redisTemplate;
     private final JwtUtils jwtUtils;
+    private final MqttService mqttService;
     private final UserService userService;
 
     @Override
@@ -74,18 +79,39 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
 
         return Mono.firstWithSignal(
                         session.receive()
-                                .doOnNext(message -> log.info("📩 Received from {}: {}", userId, message.getPayloadAsText()))
-                                .doOnError(error -> log.warn("❌ WebSocket error: {}", error.getMessage())) // Bắt lỗi nếu có
+                                .doOnError(error -> {
+                                    log.error("❌ WebSocket error for user {}: {}", userId, error.getMessage(), error);
+                                })
+                                .flatMap(message -> handleWebSocketMessage(userId, message.getPayloadAsText()))
                                 .then(),
                         session.send(sessionManager.getUserFlux(userId)
                                 .map(session::textMessage))
                 )
                 .doFinally(signalType -> {
-                    log.info("🔴 WebSocket disconnected: user {}", userId);
+                    log.info("🔴 WebSocket disconnected: user {} (Reason: {})", userId, signalType);
                     sessionManager.removeSession(userId);
                 })
                 .then();
     }
+
+    private Mono<Void> handleWebSocketMessage(String userId, String message) {
+        log.info("📩 Received WebSocket message from {}: {}", userId, message);
+
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode jsonNode = objectMapper.readTree(message);
+
+            String feed = jsonNode.get("feed").asText();
+            String value = jsonNode.get("value").asText();
+
+            log.info("✅ Parsed JSON -> Feed: {}, Value: {}", feed, value);
+            return mqttService.sendMqttCommand(userId, feed, value);
+        } catch (Exception e) {
+            log.error("❌ Invalid WebSocket message format", e);
+            return Mono.empty();
+        }
+    }
+
 
 
 }
