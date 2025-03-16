@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.integration.channel.DirectChannel;
 import org.springframework.integration.mqtt.inbound.MqttPahoMessageDrivenChannelAdapter;
+import org.springframework.integration.mqtt.support.MqttHeaders;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -19,9 +20,17 @@ public class MqttMessageHandler {
         adapter.setOutputChannel(mqttChannel);
 
         mqttChannel.subscribe(message -> {
+            String topic = (String) message.getHeaders().get(MqttHeaders.RECEIVED_TOPIC);
             String payload = (String) message.getPayload();
-            log.info("🔔 MQTT Received for user {}: {}", user.getUsername(), payload);
-            webSocketSessionManager.sendToUser(user.getUsername(), payload);
+
+            if (payload.isBlank()) {
+                log.warn("⚠️ Received empty payload from topic {}", topic);
+                return;
+            }
+
+            log.info("🔔 MQTT Received from topic {}: {}", topic, payload);
+
+            webSocketSessionManager.sendToUser(user.getId(), payload);
         });
     }
 }

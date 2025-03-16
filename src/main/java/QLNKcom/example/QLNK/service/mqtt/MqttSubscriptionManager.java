@@ -22,41 +22,46 @@ public class MqttSubscriptionManager {
 
     public Mono<Void> subscribeFeed(User user, List<String> feeds) {
         return Mono.fromRunnable(() -> {
-            String clientId = "mqtt-client-" + user.getUsername();
-
-            if (activeSubscribers.containsKey(clientId)) {
-                log.info("🔄 User {} is already subscribed, skipping re-subscription", user.getUsername());
-                return;
-            }
 
             if (feeds.isEmpty()) {
                 log.warn("User {} has no feeds to subscribe", user.getUsername());
                 return;
             }
 
-            MqttPahoMessageDrivenChannelAdapter adapter = new MqttPahoMessageDrivenChannelAdapter(
-                    clientId,
-                    mqttClientFactory.createMqttClientFactory(user.getUsername(), user.getApikey()),
-                    feeds.toArray(new String[0])
-            );
+            String clientId = "mqtt-" + user.getId();
+            if (activeSubscribers.containsKey(clientId)) {
+                log.info("🔄 User {} is already subscribed, skipping re-subscription", user.getUsername());
+                return;
+            }
 
-            adapter.setQos(0);
-            adapter.setCompletionTimeout(1000);
-            adapter.setConverter(new DefaultPahoMessageConverter());
+            try {
+                MqttPahoMessageDrivenChannelAdapter adapter = new MqttPahoMessageDrivenChannelAdapter(
+                        clientId,
+                        mqttClientFactory.createMqttClientFactory(user.getUsername(), user.getApikey()),
+                        feeds.toArray(new String[0])
+                );
 
-            mqttMessageHandler.attachHandler(adapter, user);
+                adapter.setQos(1);
+                adapter.setConverter(new DefaultPahoMessageConverter());
 
-            adapter.start();
-            activeSubscribers.put(clientId, adapter);
+                mqttMessageHandler.attachHandler(adapter, user);
 
-            log.info("✅ Subscribed user {} to feeds: {}", user.getUsername(), feeds);
+                adapter.start();
+                activeSubscribers.put(clientId, adapter);
+
+                log.info("✅ Subscribed user {} to feeds: {}", user.getUsername(), feeds);
+            }
+            catch (Exception e) {
+                log.error("❌ Failed to subscribe user {}: {}", user.getId(), e.getMessage(), e);
+            }
+
         });
     }
 
     public Mono<Void> unsubscribeFeed(User user) {
         return Mono.fromRunnable(() -> {
 
-            String clientId = "mqtt-client-" + user.getUsername();
+            String clientId = "mqtt-" + user.getId();
             if (activeSubscribers.containsKey(clientId)) {
                 MqttPahoMessageDrivenChannelAdapter adapter = activeSubscribers.remove(clientId);
                 adapter.stop();
