@@ -12,7 +12,6 @@ import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketSession;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Component
@@ -77,14 +76,16 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
         sessionManager.registerSession(userId);
         log.info("✅ WebSocket connected: user {}", userId);
 
+        String type = session.getHandshakeInfo().getUri().getQuery();
+        String requestedKey = (type != null && type.startsWith("key=")) ? type.substring(4) : null;
+
         return Mono.firstWithSignal(
                         session.receive()
-                                .doOnError(error -> {
-                                    log.error("❌ WebSocket error for user {}: {}", userId, error.getMessage(), error);
-                                })
+                                .doOnError(error -> log.error("❌ WebSocket error for user {}: {}", userId, error.getMessage(), error))
                                 .flatMap(message -> handleWebSocketMessage(userId, message.getPayloadAsText()))
                                 .then(),
                         session.send(sessionManager.getUserFlux(userId)
+                                .filter(json -> shouldSendData(json, requestedKey))
                                 .map(session::textMessage))
                 )
                 .doFinally(signalType -> {
@@ -113,5 +114,15 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
     }
 
 
+    private boolean shouldSendData(String json, String requestedKey) {
+        try {
+            JsonNode jsonNode = new ObjectMapper().readTree(json);
+            String key = jsonNode.get("key").asText();
+            return requestedKey == null || key.equals(requestedKey);
+        } catch (Exception e) {
+            log.error("❌ Error parsing JSON: {}", json, e);
+            return false;
+        }
+    }
 
 }
