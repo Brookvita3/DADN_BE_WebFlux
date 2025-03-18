@@ -77,15 +77,15 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
         log.info("✅ WebSocket connected: user {}", userId);
 
         String type = session.getHandshakeInfo().getUri().getQuery();
-        String requestedKey = (type != null && type.startsWith("key=")) ? type.substring(4) : null;
+        String feed = (type != null && type.startsWith("key=")) ? type.substring(4) : null;
 
         return Mono.firstWithSignal(
                         session.receive()
                                 .doOnError(error -> log.error("❌ WebSocket error for user {}: {}", userId, error.getMessage(), error))
-                                .flatMap(message -> handleWebSocketMessage(userId, message.getPayloadAsText()))
+                                .flatMap(message -> handleWebSocketMessage(userId, feed, message.getPayloadAsText()))
                                 .then(),
                         session.send(sessionManager.getUserFlux(userId)
-                                .filter(json -> shouldSendData(json, requestedKey))
+                                .filter(json -> shouldSendData(json, feed))
                                 .map(session::textMessage))
                 )
                 .doFinally(signalType -> {
@@ -95,14 +95,13 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
                 .then();
     }
 
-    private Mono<Void> handleWebSocketMessage(String userId, String message) {
+    private Mono<Void> handleWebSocketMessage(String userId, String feed, String message) {
         log.info("📩 Received WebSocket message from {}: {}", userId, message);
 
         try {
             ObjectMapper objectMapper = new ObjectMapper();
             JsonNode jsonNode = objectMapper.readTree(message);
 
-            String feed = jsonNode.get("feed").asText();
             String value = jsonNode.get("value").asText();
 
             log.info("✅ Parsed JSON -> Feed: {}, Value: {}", feed, value);

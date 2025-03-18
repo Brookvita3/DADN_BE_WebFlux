@@ -41,7 +41,7 @@ public class MqttService {
     }
 
     public Mono<Void> sendMqttCommand(String userId, String feed, String value) {
-        return userService.findById(userId) // Lấy user từ DB
+        return userService.findById(userId)
                 .flatMap(user -> {
                     String topic = user.getUsername() + "/feeds/" + feed;
                     return mqttSubscriptionManager.getMqttMessageHandler(userId)
