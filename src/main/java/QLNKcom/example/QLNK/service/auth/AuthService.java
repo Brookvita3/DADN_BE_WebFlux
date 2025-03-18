@@ -98,9 +98,9 @@ public class AuthService {
     }
 
     private Mono<AuthResponse> fetchAndStoreFeeds(AuthResponse response, User user) {
-        return adafruitService.getUserFeeds(user.getUsername(), user.getApikey())
-                .flatMap(feeds -> {
-                    user.setFeeds(feeds);
+        return adafruitService.getUserGroups(user.getUsername(), user.getApikey())
+                .flatMap(groups -> {
+                    user.setGroups(groups);
                     return userService.saveUser(user);
                 })
                 .thenReturn(response)

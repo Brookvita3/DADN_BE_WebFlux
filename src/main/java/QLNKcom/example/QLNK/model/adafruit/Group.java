@@ -1,13 +1,16 @@
 package QLNKcom.example.QLNK.model.adafruit;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
-public class Feed {
+public class Group {
     private Long id;
 
     private String name;
 
     private String key;
+
+    private List<Feed> feeds;
 }

@@ -1,7 +1,6 @@
 package QLNKcom.example.QLNK.service.mqtt;
 
 import QLNKcom.example.QLNK.model.User;
-import QLNKcom.example.QLNK.service.adafruit.AdafruitService;
 import QLNKcom.example.QLNK.service.user.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,17 +19,15 @@ import java.util.List;
 public class MqttService {
 
     private final MqttSubscriptionManager mqttSubscriptionManager;
-    private final AdafruitService adafruitService;
     private final UserService userService;
 
     public Mono<Void> subscribeUserFeeds(User user) {
-        return adafruitService.getUserFeeds(user.getUsername(), user.getApikey())
-                .flatMap(feeds -> {
-                    List<String> topics = feeds.stream()
-                            .map(feed -> user.getUsername() + "/feeds/" + feed.getName() + "/json")
-                            .toList();
-                    return mqttSubscriptionManager.subscribeFeed(user, topics);
-                });
+        List<String> topics = user.getGroups().stream()
+                .flatMap(group -> group.getFeeds().stream())
+                .map(feed -> user.getUsername() + "/feeds/" + feed.getKey() + "/json")
+                .toList();
+
+        return mqttSubscriptionManager.subscribeFeed(user, topics);
     }
 
     public Mono<Void> unsubscribeUserFeeds(User user) {

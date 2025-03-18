@@ -1,6 +1,7 @@
 package QLNKcom.example.QLNK.service.adafruit;
 
 import QLNKcom.example.QLNK.model.adafruit.Feed;
+import QLNKcom.example.QLNK.model.adafruit.Group;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,5 +29,15 @@ public class AdafruitService {
                 .bodyToFlux(Feed.class)
                 .collectList()
                 .doOnNext(feeds -> log.info("Fetched {} feeds for user {}", feeds.size(), username));
+    }
+
+    public Mono<List<Group>> getUserGroups(String username, String apiKey) {
+        return webClient.get()
+                .uri("/{username}/groups/", username)
+                .header("X-AIO-Key", apiKey)
+                .retrieve()
+                .bodyToFlux(Group.class)
+                .collectList()
+                .doOnNext(groups -> log.info("Fetched {} groups for user {}", groups.size(), username));
     }
 }

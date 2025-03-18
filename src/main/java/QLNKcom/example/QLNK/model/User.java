@@ -1,6 +1,7 @@
 package QLNKcom.example.QLNK.model;
 
 import QLNKcom.example.QLNK.model.adafruit.Feed;
+import QLNKcom.example.QLNK.model.adafruit.Group;
 import lombok.Builder;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
@@ -18,5 +19,5 @@ public class User {
     private String password;
     private String email;
     private String apikey;
-    private List<Feed> feeds;
+    private List<Group> groups;
 }
