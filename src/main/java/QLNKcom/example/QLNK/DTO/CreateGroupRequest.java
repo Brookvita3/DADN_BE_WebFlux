@@ -2,9 +2,7 @@ package QLNKcom.example.QLNK.DTO;
 
 import QLNKcom.example.QLNK.model.adafruit.Feed;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import lombok.Builder;
 import lombok.Data;
 
 import java.util.List;

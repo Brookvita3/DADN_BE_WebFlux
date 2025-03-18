@@ -40,16 +40,15 @@ public class UserController {
     public Mono<ResponseEntity<ResponseObject>> createGroup(@RequestBody @Valid CreateGroupRequest request) {
         return ReactiveSecurityContextHolder.getContext()
                 .map(SecurityContext::getAuthentication)
-                .flatMap(auth -> {
-                    String email = auth.getName();
-                    return userService.createGroupByEmail(request, email)
-                            .map(group -> ResponseEntity.ok(
-                                    ResponseObject.builder()
-                                            .message("Get user groups successfully")
-                                            .data(group)
-                                            .status(HttpStatus.OK.value())
-                                            .build()
-                            ));
-                });
+                .map(Authentication::getName)
+                .flatMap(email -> userService.createGroupByEmail(request, email))
+                .map(group -> ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Create group successfully")
+                                .data(group)
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ));
     }
+
 }

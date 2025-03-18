@@ -2,10 +2,12 @@ package QLNKcom.example.QLNK.service.user;
 
 import QLNKcom.example.QLNK.DTO.CreateGroupRequest;
 import QLNKcom.example.QLNK.DTO.RegisterRequest;
+import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.exception.DataNotFoundException;
 import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.model.adafruit.Group;
 import QLNKcom.example.QLNK.repository.UserRepository;
+import QLNKcom.example.QLNK.service.adafruit.AdafruitService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,6 +21,7 @@ import java.util.List;
 public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AdafruitService adafruitService;
 
     public Mono<User> findByEmail(String email) {
         System.out.println("🚀 Finding user: " + email);
@@ -58,13 +61,26 @@ public class UserService {
     public Mono<Group> createGroupByEmail(CreateGroupRequest request, String email) {
         return findByEmail(email)
                 .flatMap(user -> {
+
+                    boolean groupExists = user.getGroups().stream()
+                            .anyMatch(group -> group.getName().equals(request.getName()));
+
+                    if (groupExists) {
+                        return Mono.error(new CustomAuthException("Group name already exists", HttpStatus.BAD_REQUEST));
+                    }
+
                     Group group = Group.builder()
                             .name(request.getName())
                             .description(request.getDescription())
                             .feeds(request.getFeeds())
                             .build();
+
                     user.getGroups().add(group);
-                    return saveUser(user).thenReturn(group);
+                    return adafruitService.createUserGroup(user.getUsername(), user.getApikey(), request)
+                            .flatMap(adafruitGroup -> {
+                                user.getGroups().add(group);
+                                return saveUser(user).thenReturn(group);
+                            });
                 });
     }
 
