@@ -52,7 +52,7 @@ public class AuthService {
                                 .flatMap(user -> generateTokensAndCache(user)
                                         .flatMap(response-> fetchAndStoreFeeds(response, user)))
                 )
-                .cast(AuthResponse.class)
+                .map(auth-> (AuthResponse) auth)
                 .doOnError(error -> System.err.println("❌ Error in register flow: " + error.getMessage()));
     }
 

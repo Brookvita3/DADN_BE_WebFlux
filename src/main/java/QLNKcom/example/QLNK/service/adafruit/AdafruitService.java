@@ -1,5 +1,6 @@
 package QLNKcom.example.QLNK.service.adafruit;
 
+import QLNKcom.example.QLNK.DTO.CreateFeedRequest;
 import QLNKcom.example.QLNK.DTO.CreateGroupRequest;
 import QLNKcom.example.QLNK.model.adafruit.Feed;
 import QLNKcom.example.QLNK.model.adafruit.Group;
@@ -69,5 +70,14 @@ public class AdafruitService {
                 .bodyToMono(Group.class)
                 .doOnNext(group -> log.info("✅ Created group: {} for user {}", group.getName(), username));
 
+    }
+
+    public Mono<Feed> createFeed(String username, String apiKey, String groupKey, CreateFeedRequest request) {
+        return webClient.post()
+                .uri("/{username}/feeds?group_key={groupKey}", username, groupKey)
+                .header("X-AIO-Key", apiKey)
+                .bodyValue(request)
+                .retrieve()
+                .bodyToMono(Feed.class);
     }
 }

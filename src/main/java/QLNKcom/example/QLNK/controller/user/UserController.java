@@ -1,7 +1,7 @@
 package QLNKcom.example.QLNK.controller.user;
 
+import QLNKcom.example.QLNK.DTO.CreateFeedRequest;
 import QLNKcom.example.QLNK.DTO.CreateGroupRequest;
-import QLNKcom.example.QLNK.model.adafruit.Group;
 import QLNKcom.example.QLNK.response.ResponseObject;
 import QLNKcom.example.QLNK.service.user.UserService;
 import jakarta.validation.Valid;
@@ -50,5 +50,23 @@ public class UserController {
                                 .build()
                 ));
     }
+
+    @PostMapping("/me/groups/{groupKey}/feeds")
+    public Mono<ResponseEntity<ResponseObject>> createFeed(
+            @PathVariable String groupKey,
+            @RequestBody CreateFeedRequest request) {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getName)
+                .flatMap(email -> userService.createFeedForGroup(request, email, groupKey))
+                .map(feed -> ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Feed created successfully")
+                                .data(feed)
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ));
+    }
+
 
 }
