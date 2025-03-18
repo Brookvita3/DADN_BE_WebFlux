@@ -39,14 +39,13 @@ public class AuthController {
     @PostMapping("/register")
     public Mono<ResponseEntity<ResponseObject>> register(@Valid @RequestBody RegisterRequest request) {
         return authService.register(request)
-                .then(Mono.fromCallable(() -> {
-                    ResponseObject response = ResponseObject.builder()
-                            .message("Register successfully")
-                            .data("Register successfully")
-                            .status(HttpStatus.OK.value())
-                            .build();
-                    return ResponseEntity.ok(response);
-                }));
+                .map(registeredUser -> ResponseObject.builder()
+                        .message("Register successfully")
+                        .data(registeredUser) // Thêm kết quả của register vào data
+                        .status(HttpStatus.OK.value())
+                        .build()
+                )
+                .map(ResponseEntity::ok);
     }
 
     @PostMapping("/refresh")
@@ -65,16 +64,12 @@ public class AuthController {
     @PostMapping("/logout")
     public Mono<ResponseEntity<ResponseObject>> logout(ServerHttpRequest request) {
         return authService.logout(request)
-                .then(Mono.fromCallable(() -> {
-                    ResponseObject response = ResponseObject.builder()
-                            .message("Logout successfully")
-                            .data("Logout successfully")
-                            .status(HttpStatus.OK.value())
-                            .build();
-                    return ResponseEntity.ok(response);
-                }));
+                .thenReturn(ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Logout successfully")
+                                .data("Logout successfully")
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ));
     }
-
-
-
 }

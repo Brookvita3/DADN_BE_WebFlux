@@ -37,9 +37,7 @@ public class AuthService {
         return customReactiveUserDetailsService.findByUsername(request.getEmail())
                 .filter(userDetails -> passwordEncoder.matches(request.getPassword(), userDetails.getPassword()))
                 .switchIfEmpty(Mono.error(new BadCredentialsException("Invalid credentials")))
-                .flatMap(userDetails -> userService.findByEmail(request.getEmail())
-                        .switchIfEmpty(Mono.error(new DataNotFoundException("User not found in database", HttpStatus.NOT_FOUND)))
-                )
+                .flatMap(userDetails -> userService.findByEmail(request.getEmail()))
                 .flatMap(user -> generateTokensAndCache(user)
                         .flatMap(response-> fetchAndStoreFeeds(response, user))
                 )
@@ -49,9 +47,11 @@ public class AuthService {
     public Mono<AuthResponse> register(RegisterRequest request) {
         return userService.findByEmail(request.getEmail())
                 .flatMap(existingUser -> Mono.error(new CustomAuthException("Email already in use", HttpStatus.BAD_REQUEST)))
-                .switchIfEmpty(Mono.defer(() -> userService.createUser(request)
-                        .flatMap(this::generateTokensAndCache)
-                ))
+                .onErrorResume(DataNotFoundException.class, ex ->
+                        userService.createUser(request)
+                                .flatMap(user -> generateTokensAndCache(user)
+                                        .flatMap(response-> fetchAndStoreFeeds(response, user)))
+                )
                 .cast(AuthResponse.class)
                 .doOnError(error -> System.err.println("❌ Error in register flow: " + error.getMessage()));
     }
