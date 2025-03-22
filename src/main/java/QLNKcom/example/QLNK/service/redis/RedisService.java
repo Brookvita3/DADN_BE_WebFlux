@@ -1,6 +1,6 @@
 package QLNKcom.example.QLNK.service.redis;
 
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -8,9 +8,12 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 
 @Service
-@RequiredArgsConstructor
 public class RedisService {
     private final ReactiveRedisTemplate<String, String> redisTemplate;
+
+    public RedisService(@Qualifier("reactiveRedisTemplate") ReactiveRedisTemplate<String, String> redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
 
     public Mono<Void> saveRefreshTokenIat(String email, Long iat) {
         return redisTemplate.opsForValue()
@@ -30,6 +33,12 @@ public class RedisService {
         return redisTemplate.delete("refresh:iat:" + email)
                 .doOnSuccess(success -> System.out.println("✅ [REDIS] Delete success for " + email))
                 .then();
+    }
+
+    public Mono<String> getValue(String key) {
+        return redisTemplate.opsForValue()
+                .get(key)
+                .doOnSuccess(value -> System.out.println("✅ [REDIS] Get value success for key: " + key));
     }
 
 }

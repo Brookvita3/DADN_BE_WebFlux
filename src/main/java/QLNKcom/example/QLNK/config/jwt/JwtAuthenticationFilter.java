@@ -2,12 +2,12 @@ package QLNKcom.example.QLNK.config.jwt;
 
 import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.response.ResponseObject;
+import QLNKcom.example.QLNK.service.redis.RedisService;
 import QLNKcom.example.QLNK.service.user.CustomReactiveUserDetailsService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
@@ -31,8 +31,9 @@ import java.util.Optional;
 public class JwtAuthenticationFilter implements WebFilter {
 
     private final JwtUtils jwtUtils;
-    private final ReactiveRedisTemplate<String, String> redisTemplate;
+    private final RedisService redisService;
     private final CustomReactiveUserDetailsService customReactiveUserDetailsService;
+
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
@@ -65,8 +66,7 @@ public class JwtAuthenticationFilter implements WebFilter {
     }
 
     private Mono<Long> getRedisRefreshTokenIat(String email) {
-        return redisTemplate.opsForValue()
-                .get("refresh:iat:" + email)
+        return redisService.getValue("refresh:iat:" + email)
                 .map(Long::parseLong)
                 .switchIfEmpty(Mono.error(new CustomAuthException("Access token is revoked", HttpStatus.UNAUTHORIZED)));
     }

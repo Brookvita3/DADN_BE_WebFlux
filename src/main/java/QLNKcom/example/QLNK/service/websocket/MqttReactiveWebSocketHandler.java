@@ -3,12 +3,12 @@ package QLNKcom.example.QLNK.service.websocket;
 import QLNKcom.example.QLNK.config.jwt.JwtUtils;
 import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.service.mqtt.MqttService;
+import QLNKcom.example.QLNK.service.redis.RedisService;
 import QLNKcom.example.QLNK.service.user.UserService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketSession;
@@ -20,7 +20,7 @@ import reactor.core.publisher.Mono;
 public class MqttReactiveWebSocketHandler implements WebSocketHandler {
 
     private final WebSocketSessionManager sessionManager;
-    private final ReactiveRedisTemplate<String, String> redisTemplate;
+    private final RedisService redisService;
     private final JwtUtils jwtUtils;
     private final MqttService mqttService;
     private final UserService userService;
@@ -55,7 +55,7 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
     }
     private Mono<String> validateTokenWithRedis(String token, String email) {
         String redisKey = "refresh:iat:" + email;
-        return redisTemplate.opsForValue().get(redisKey)
+        return redisService.getValue(redisKey)
                 .flatMap(refreshTokenIatStr -> {
                     if (refreshTokenIatStr == null) {
                         log.warn("❌ No refreshTokenIat found in Redis, closing WebSocket");
