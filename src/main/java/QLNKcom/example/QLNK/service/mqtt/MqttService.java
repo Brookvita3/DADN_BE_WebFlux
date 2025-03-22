@@ -1,7 +1,8 @@
 package QLNKcom.example.QLNK.service.mqtt;
 
 import QLNKcom.example.QLNK.model.User;
-import QLNKcom.example.QLNK.service.user.UserService;
+import QLNKcom.example.QLNK.model.adafruit.Feed;
+import QLNKcom.example.QLNK.provider.user.UserProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -19,15 +20,24 @@ import java.util.List;
 public class MqttService {
 
     private final MqttSubscriptionManager mqttSubscriptionManager;
-    private final UserService userService;
+    private final UserProvider userProvider;
 
-    public Mono<Void> subscribeUserFeeds(User user) {
+    public Mono<Void> subscribeUserFeedsOnLogin(User user) {
         List<String> topics = user.getGroups().stream()
                 .flatMap(group -> group.getFeeds().stream())
                 .map(feed -> user.getUsername() + "/feeds/" + feed.getKey() + "/json")
                 .toList();
 
-        return mqttSubscriptionManager.subscribeFeed(user, topics);
+        return mqttSubscriptionManager.subscribeFeed(user, topics)
+                .onErrorResume(e -> {
+                    log.error("Failed to subscribe feeds for user {}: {}", user.getUsername(), e.getMessage());
+                    return Mono.empty();
+                });
+    }
+
+    public Mono<Feed> updateUserFeedSubscription(User user, Feed feed) {
+        String topic = user.getUsername() + "/feeds/" + feed.getKey() + "/json";
+        return mqttSubscriptionManager.updateSubscription(user, topic).thenReturn(feed);
     }
 
     public Mono<Void> unsubscribeUserFeeds(User user) {
@@ -41,10 +51,10 @@ public class MqttService {
     }
 
     public Mono<Void> sendMqttCommand(String userId, String feed, String value) {
-        return userService.findById(userId)
+        return userProvider.findById(userId)
                 .flatMap(user -> {
                     String topic = user.getUsername() + "/feeds/" + feed;
-                    return mqttSubscriptionManager.getMqttMessageHandler(userId)
+                    return mqttSubscriptionManager.getMqttPahoMessageHandler(userId)
                             .flatMap(handler -> {
                                 Message<String> message = createMqttMessage(topic, value);
                                 handler.handleMessage(message); // Gửi lên MQTT

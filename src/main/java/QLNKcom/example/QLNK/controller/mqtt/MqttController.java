@@ -4,7 +4,7 @@ import QLNKcom.example.QLNK.config.jwt.JwtUtils;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.response.ResponseObject;
 import QLNKcom.example.QLNK.service.mqtt.MqttService;
-import QLNKcom.example.QLNK.service.user.UserService;
+import QLNKcom.example.QLNK.provider.user.UserProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,7 +20,7 @@ import reactor.core.publisher.Mono;
 public class MqttController {
 
     private final MqttService mqttService;
-    private final UserService userService;
+    private final UserProvider userProvider;
     private final JwtUtils jwtUtils;
 
     @PostMapping("/subscribe")
@@ -29,8 +29,8 @@ public class MqttController {
             try {
                 String token = jwtUtils.extractToken(request);
                 String email = jwtUtils.extractAccessEmail(token);
-                return userService.findByEmail(email)
-                        .flatMap(mqttService::subscribeUserFeeds)
+                return userProvider.findByEmail(email)
+                        .flatMap(mqttService::subscribeUserFeedsOnLogin)
                         .thenReturn(ResponseEntity.ok(new ResponseObject("Subscribed successfully!", HttpStatus.OK.value(), null)));
             } catch (CustomAuthException e) {
                 return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -48,7 +48,7 @@ public class MqttController {
             try {
                 String token = jwtUtils.extractToken(request);
                 String email = jwtUtils.extractAccessEmail(token);
-                return userService.findByEmail(email)
+                return userProvider.findByEmail(email)
                         .flatMap(mqttService::unsubscribeUserFeeds)
                         .thenReturn(ResponseEntity.ok(new ResponseObject("Unsubscribed successfully!", HttpStatus.OK.value(), null)));
             } catch (CustomAuthException e) {

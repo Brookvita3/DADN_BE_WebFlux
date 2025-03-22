@@ -12,6 +12,7 @@ import QLNKcom.example.QLNK.response.auth.AuthResponse;
 import QLNKcom.example.QLNK.service.adafruit.AdafruitService;
 import QLNKcom.example.QLNK.service.redis.RedisService;
 import QLNKcom.example.QLNK.service.user.CustomReactiveUserDetailsService;
+import QLNKcom.example.QLNK.provider.user.UserProvider;
 import QLNKcom.example.QLNK.service.user.UserService;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ import reactor.core.publisher.Mono;
 public class AuthService {
 
     private final UserService userService;
+    private final UserProvider userProvider;
     private final AdafruitService adafruitService;
     private final CustomReactiveUserDetailsService customReactiveUserDetailsService;
     private final RedisService redisService;
@@ -37,7 +39,7 @@ public class AuthService {
         return customReactiveUserDetailsService.findByUsername(request.getEmail())
                 .filter(userDetails -> passwordEncoder.matches(request.getPassword(), userDetails.getPassword()))
                 .switchIfEmpty(Mono.error(new BadCredentialsException("Invalid credentials")))
-                .flatMap(userDetails -> userService.findByEmail(request.getEmail()))
+                .flatMap(userDetails -> userProvider.findByEmail(request.getEmail()))
                 .flatMap(user -> generateTokensAndCache(user)
                         .flatMap(response-> fetchAndStoreFeeds(response, user))
                 )
@@ -45,7 +47,7 @@ public class AuthService {
     }
 
     public Mono<AuthResponse> register(RegisterRequest request) {
-        return userService.findByEmail(request.getEmail())
+        return userProvider.findByEmail(request.getEmail())
                 .flatMap(existingUser -> Mono.error(new CustomAuthException("Email already in use", HttpStatus.BAD_REQUEST)))
                 .onErrorResume(DataNotFoundException.class, ex ->
                         userService.createUser(request)
@@ -101,7 +103,7 @@ public class AuthService {
         return adafruitService.getUserGroups(user.getUsername(), user.getApikey())
                 .flatMap(groups -> {
                     user.setGroups(groups);
-                    return userService.saveUser(user);
+                    return userProvider.saveUser(user);
                 })
                 .thenReturn(response)
                 .onErrorMap(error -> new AdafruitException("Exception in connect to Adafruit", HttpStatus.BAD_REQUEST));

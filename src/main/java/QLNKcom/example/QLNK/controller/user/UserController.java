@@ -61,7 +61,7 @@ public class UserController {
                 .flatMap(email -> userService.createFeedForGroup(request, email, groupKey))
                 .map(feed -> ResponseEntity.ok(
                         ResponseObject.builder()
-                                .message("Feed created successfully")
+                                .message("Feed created and update subscribe successfully")
                                 .data(feed)
                                 .status(HttpStatus.OK.value())
                                 .build()
