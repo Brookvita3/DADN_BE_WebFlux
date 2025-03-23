@@ -12,6 +12,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.context.ServerSecurityContextRepository;
 import org.springframework.security.web.server.context.WebSessionServerSecurityContextRepository;
+import org.springframework.web.cors.CorsConfiguration;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableWebFluxSecurity
@@ -24,7 +28,6 @@ public class WebSecurityConfig {
     public SecurityWebFilterChain securityFilterChain(ServerHttpSecurity http, ServerSecurityContextRepository securityContextRepository) {
         http.authorizeExchange(auth -> auth
                 .pathMatchers("/", "/auth/**").permitAll()
-                //.pathMatchers("/ws/**").permitAll()
                 .pathMatchers("/auth/logout").authenticated()
                 .anyExchange().authenticated()
         );
@@ -32,6 +35,15 @@ public class WebSecurityConfig {
         http.securityContextRepository(securityContextRepository);
         http.csrf(ServerHttpSecurity.CsrfSpec::disable);
         http.formLogin(ServerHttpSecurity.FormLoginSpec::disable);
+
+        http.cors(cors -> cors.configurationSource(request -> {
+            CorsConfiguration config = new CorsConfiguration();
+            config.setAllowedOrigins(List.of("http://localhost:3000")); // Frontend origin
+            config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+            config.setAllowedHeaders(List.of("*"));
+            config.setAllowCredentials(true);
+            return config;
+        }));
 
         return http.build();
     }
