@@ -69,4 +69,20 @@ public class UserController {
     }
 
 
+    @DeleteMapping("/me/groups/{groupKey}/feeds/{feedKey}")
+    public Mono<ResponseEntity<ResponseObject>> deleteFeed(
+            @PathVariable String groupKey, @PathVariable String feedKey) {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getName)
+                .flatMap(email -> userService.deleteFeed(email, groupKey, feedKey))
+                .thenReturn(ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Feed delete and unsubscribe successfully")
+                                .data(null)
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ));
+    }
+
 }

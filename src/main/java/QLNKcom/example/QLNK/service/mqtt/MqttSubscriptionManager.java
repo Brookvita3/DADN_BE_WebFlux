@@ -1,6 +1,7 @@
 package QLNKcom.example.QLNK.service.mqtt;
 
 import QLNKcom.example.QLNK.model.User;
+import QLNKcom.example.QLNK.model.adafruit.Feed;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.integration.mqtt.core.MqttPahoClientFactory;
@@ -79,7 +80,7 @@ public class MqttSubscriptionManager {
         });
     }
 
-    public Mono<Void> unsubscribeFeed(User user) {
+    public Mono<Void> unsubscribeFeeds(User user) {
         return Mono.fromRunnable(() -> {
             String clientId = "mqtt-" + user.getId();
             MqttPahoMessageDrivenChannelAdapter adapter = activeSubscribers.remove(clientId);
@@ -87,6 +88,30 @@ public class MqttSubscriptionManager {
             if (adapter != null) {
                 adapter.stop();
                 log.info("❌ Unsubscribed user {} from MQTT", user.getUsername());
+            }
+        });
+    }
+
+    public Mono<Void> unsubscribeFeed(User user, String topic) {
+        String clientId = "mqtt-" + user.getId();
+        MqttPahoMessageDrivenChannelAdapter adapter = activeSubscribers.get(clientId);
+
+        return Mono.fromRunnable(() -> {
+            if (adapter != null) {
+                Set<String> currentTopics = new HashSet<>(Arrays.asList(adapter.getTopic()));
+                if (currentTopics.contains(topic)) {
+                    adapter.removeTopic(topic);
+                    currentTopics.remove(topic);
+                    log.info("➖ Removed topic {} for user {}", topic, user.getUsername());
+
+                    if (currentTopics.isEmpty()) {
+                        adapter.stop();
+                        activeSubscribers.remove(clientId);
+                        log.info("🗑️ Removed adapter for user {} as no topics remain", user.getUsername());
+                        activeHandlers.remove(clientId);
+                        log.info("🗑️ Removed message handler for user {}", user.getUsername());
+                    }
+                }
             }
         });
     }

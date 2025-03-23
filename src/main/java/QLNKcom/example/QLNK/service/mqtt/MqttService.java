@@ -41,7 +41,12 @@ public class MqttService {
     }
 
     public Mono<Void> unsubscribeUserFeeds(User user) {
-        return mqttSubscriptionManager.unsubscribeFeed(user);
+        return mqttSubscriptionManager.unsubscribeFeeds(user);
+    }
+
+    public Mono<Void> unsubscribeUserFeed(User user, Feed feed) {
+        String topic = user.getUsername() + "/feeds/" + feed.getKey() + "/json";
+        return mqttSubscriptionManager.unsubscribeFeed(user, topic);
     }
 
     private Message<String> createMqttMessage(String topic, String value) {

@@ -98,4 +98,25 @@ public class UserService {
         return userProvider.findByEmail(email).map(User::getGroups);
     }
 
+    public Mono<Void> deleteFeed(String email, String groupKey, String feedKey) {
+        return userProvider.findByEmail(email)
+                .flatMap(user -> {
+
+                    Group group = user.getGroups().stream()
+                            .filter(g -> g.getKey().equals(groupKey))
+                            .findFirst()
+                            .orElseThrow(() -> new CustomAuthException("Group not found", HttpStatus.NOT_FOUND));
+
+                    Feed feed = group.getFeeds().stream()
+                            .filter(f -> f.getKey().equals(feedKey))
+                            .findFirst()
+                            .orElseThrow(() -> new CustomAuthException("Feed not found", HttpStatus.NOT_FOUND));
+
+                    return adafruitService.deleteFeed(user.getUsername(), user.getApikey(), feedKey)
+                            .onErrorResume(e -> Mono.error(new CustomAuthException("Failed to delete feed on Adafruit: " + e.getMessage(), HttpStatus.BAD_REQUEST)))
+                            .then(userProvider.deleteFeedFromGroup(user.getId(), groupKey, feedKey))
+                            .then(mqttService.unsubscribeUserFeed(user, feed));
+                });
+    }
+
 }

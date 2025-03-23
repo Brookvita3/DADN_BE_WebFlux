@@ -40,4 +40,9 @@ public class UserProviderImpl implements UserProvider {
         System.out.println("🚀 Saving user: " + user.getEmail());
         return userRepository.save(user);
     }
+
+    @Override
+    public Mono<Void> deleteFeedFromGroup(String userId, String groupKey, String feedKey) {
+        return userRepository.deleteFeedFromGroup(userId, groupKey, feedKey);
+    }
 }
