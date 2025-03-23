@@ -100,4 +100,21 @@ public class AdafruitService {
                 .toBodilessEntity()
                 .then();
     }
+
+    public  Mono<Void> deleteGroup(String username, String apiKey, String groupKey) {
+        return webClient.delete()
+                .uri("/{username}/groups/{group_key}", username, groupKey)
+                .header("X-AIO-Key", apiKey)
+                .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, response -> {
+                    if (response.statusCode() == HttpStatus.NOT_FOUND) {
+                        return Mono.error(new CustomAuthException("Group not found on Adafruit", HttpStatus.NOT_FOUND));
+                    } else if (response.statusCode() == HttpStatus.UNAUTHORIZED) {
+                        return Mono.error(new CustomAuthException("Invalid API key", HttpStatus.UNAUTHORIZED));
+                    }
+                    return Mono.error(new CustomAuthException("Failed to delete group on Adafruit: " + response.statusCode(), HttpStatus.BAD_REQUEST));
+                })
+                .toBodilessEntity()
+                .then();
+    }
 }

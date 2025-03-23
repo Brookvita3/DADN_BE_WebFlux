@@ -45,4 +45,9 @@ public class UserProviderImpl implements UserProvider {
     public Mono<Void> deleteFeedFromGroup(String userId, String groupKey, String feedKey) {
         return userRepository.deleteFeedFromGroup(userId, groupKey, feedKey);
     }
+
+    @Override
+    public Mono<Void> deleteGroup(String userId, String groupKey) {
+        return userRepository.deleteGroup(userId, groupKey);
+    }
 }

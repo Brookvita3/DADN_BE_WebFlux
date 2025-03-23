@@ -119,4 +119,24 @@ public class UserService {
                 });
     }
 
+    public Mono<Void> deleteGroup(String email, String groupKey) {
+        return userProvider.findByEmail(email)
+                .flatMap(user -> {
+                    // Check if the group exists
+                    Group group = user.getGroups().stream()
+                            .filter(g -> g.getKey().equals(groupKey))
+                            .findFirst()
+                            .orElseThrow(() -> new CustomAuthException("Group not found", HttpStatus.NOT_FOUND));
+
+                    List<Feed> feeds = group.getFeeds();
+
+                    // Delete group from Adafruit, then delete group from MongoDB, then unsubscribe from MQTT
+                    return adafruitService.deleteGroup(user.getUsername(), user.getApikey(), groupKey)
+                            .onErrorResume(e -> Mono.error(new CustomAuthException("Failed to delete group on Adafruit: " + e.getMessage(), HttpStatus.BAD_REQUEST)))
+                            .then(userProvider.deleteGroup(user.getId(), groupKey))
+                            .then(mqttService.unsubscribeGroupFeeds(user, feeds));
+                });
+    }
+
+
 }

@@ -16,4 +16,8 @@ public interface UserRepository extends ReactiveMongoRepository<User, String> {
     @Update("{ '$pull': { 'groups.$.feeds': { 'key': ?2 } } }")
     Mono<Void> deleteFeedFromGroup(String userId, String groupKey, String feedKey);
 
+    @Query("{ '_id': ?0 }")
+    @Update("{ '$pull': { 'groups': { 'key': ?1 } } }")
+    Mono<Void> deleteGroup(String userId, String groupKey);
+
 }

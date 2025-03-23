@@ -51,6 +51,21 @@ public class UserController {
                 ));
     }
 
+    @DeleteMapping("/me/groups/{groupKey}")
+    public Mono<ResponseEntity<ResponseObject>> deleteGroup(@PathVariable String groupKey) {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getName)
+                .flatMap(email -> userService.deleteGroup(email, groupKey))
+                .thenReturn( ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Group and its feeds deleted successfully")
+                                .data(null)
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ));
+    }
+
     @PostMapping("/me/groups/{groupKey}/feeds")
     public Mono<ResponseEntity<ResponseObject>> createFeed(
             @PathVariable String groupKey,

@@ -9,4 +9,5 @@ public interface UserProvider {
     Mono<User> findByUsername(String username);
     Mono<User> saveUser(User user);
     Mono<Void> deleteFeedFromGroup(String userId, String groupKey, String feedKey);
+    Mono<Void> deleteGroup(String userId, String groupKey);
 }

@@ -10,6 +10,7 @@ import org.springframework.integration.mqtt.support.MqttHeaders;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -67,6 +68,12 @@ public class MqttService {
                                 return Mono.empty();
                             });
                 });
+    }
+
+    public Mono<Void> unsubscribeGroupFeeds(User user, List<Feed> feeds) {
+        return Flux.fromIterable(feeds)
+                .flatMap(feed -> unsubscribeUserFeed(user, feed))
+                .then();
     }
 
 
