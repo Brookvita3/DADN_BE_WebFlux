@@ -1,6 +1,7 @@
 package QLNKcom.example.QLNK.service.websocket;
 
 import QLNKcom.example.QLNK.config.jwt.JwtUtils;
+import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.provider.user.UserProvider;
 import QLNKcom.example.QLNK.service.mqtt.MqttService;
@@ -9,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketSession;
@@ -33,6 +35,10 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
                 .flatMap(userProvider::findByEmail)
                 .map(User::getId)
                 .flatMap(userId -> establishWebSocketSession(userId, session))
+                .doOnError(error -> {
+                    Mono.error(new CustomAuthException("Error occur when validate token in handshake", HttpStatus.BAD_REQUEST));
+                    session.close();
+                })
                 .switchIfEmpty(session.close());
     }
 
