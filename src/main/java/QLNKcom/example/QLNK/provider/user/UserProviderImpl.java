@@ -2,12 +2,19 @@ package QLNKcom.example.QLNK.provider.user;
 
 import QLNKcom.example.QLNK.exception.DataNotFoundException;
 import QLNKcom.example.QLNK.model.User;
+import QLNKcom.example.QLNK.model.adafruit.Group;
 import QLNKcom.example.QLNK.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
+import reactor.util.function.Tuples;
 
+import java.util.regex.Pattern;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserProviderImpl implements UserProvider {
@@ -36,6 +43,16 @@ public class UserProviderImpl implements UserProvider {
     }
 
     @Override
+    public Mono<Tuple2<User, Group>> findGroupByKey(String userId, String groupKey) {
+        return findById(userId)
+                .flatMap(user -> Mono.justOrEmpty(user.getGroups().stream()
+                                .filter(g -> g.getKey().equals(groupKey))
+                                .findFirst())
+                        .map(group -> Tuples.of(user, group))
+                        .switchIfEmpty(Mono.error(new DataNotFoundException("Group not found: " + groupKey, HttpStatus.NOT_FOUND))));
+    }
+
+    @Override
     public Mono<User> saveUser(User user) {
         System.out.println("🚀 Saving user: " + user.getEmail());
         return userRepository.save(user);
@@ -49,5 +66,69 @@ public class UserProviderImpl implements UserProvider {
     @Override
     public Mono<Void> deleteGroup(String userId, String groupKey) {
         return userRepository.deleteGroup(userId, groupKey);
+    }
+
+
+    public Mono<Void> updateGroupKey(String userId, String oldGroupKey, String newGroupKey) {
+        return findGroupByKey(userId, oldGroupKey)
+                .flatMap(tuple -> {
+                    User user = tuple.getT1();
+                    Group group = tuple.getT2();
+
+                    if (oldGroupKey.equals(newGroupKey)) {
+                        return Mono.empty();
+                    }
+
+                    group.setKey(newGroupKey);
+                    group.getFeeds().forEach(feed -> {
+                        String oldFeedKey = feed.getKey();
+                        String newFeedKey = oldFeedKey.replaceFirst(
+                                Pattern.quote(oldGroupKey + "."),
+                                newGroupKey + "."
+                        );
+                        feed.setKey(newFeedKey);
+                    });
+
+                    return userRepository.save(user).then();
+                });
+    }
+
+
+    public Mono<Void> updateGroupName(String userId, String groupKey, String newName) {
+        return findGroupByKey(userId, groupKey)
+                .flatMap(tuple -> {
+                    User user = tuple.getT1();
+                    Group group = tuple.getT2();
+
+                    if (newName == null || newName.equals(group.getName())) {
+                        return Mono.empty();
+                    }
+
+                    group.setName(newName);
+
+                    return userRepository.save(user)
+                            .doOnSuccess(v -> log.info("Saved user with updated group name: {} -> {}", group.getName(), newName))
+                            .then();
+                })
+                .doOnError(e -> log.error("Error updating group name: {}", e.getMessage()));
+    }
+
+    public Mono<Void> updateGroupDescription(String userId, String groupKey, String newDescription) {
+        return findGroupByKey(userId, groupKey)
+                .flatMap(tuple -> {
+                    User user = tuple.getT1();
+                    Group group = tuple.getT2();
+
+                    if (newDescription == null || newDescription.equals(group.getDescription())) {
+                        return Mono.empty();
+                    }
+
+                    group.setDescription(newDescription);
+
+                    return userRepository.save(user)
+                            .doOnSuccess(v -> log.info("Saved user with updated group description: {} -> {}", group.getDescription(), newDescription))
+                            .then();
+                })
+                .doOnError(e -> log.error("Error updating group description: {}", e.getMessage()));
     }
 }

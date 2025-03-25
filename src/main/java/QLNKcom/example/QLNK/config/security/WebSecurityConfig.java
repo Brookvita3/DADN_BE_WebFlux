@@ -2,6 +2,7 @@ package QLNKcom.example.QLNK.config.security;
 
 import QLNKcom.example.QLNK.config.jwt.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
@@ -14,7 +15,6 @@ import org.springframework.security.web.server.context.ServerSecurityContextRepo
 import org.springframework.security.web.server.context.WebSessionServerSecurityContextRepository;
 import org.springframework.web.cors.CorsConfiguration;
 
-import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -24,11 +24,15 @@ public class WebSecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    @Value("${webapp.version}")
+    private String apiPrefix;
+
     @Bean
     public SecurityWebFilterChain securityFilterChain(ServerHttpSecurity http, ServerSecurityContextRepository securityContextRepository) {
         http.authorizeExchange(auth -> auth
-                .pathMatchers("/", "/auth/**").permitAll()
-                .pathMatchers("/auth/logout").authenticated()
+                .pathMatchers("/", "/" + apiPrefix + "/auth/**").permitAll()
+                .pathMatchers("/" + apiPrefix + "/auth/logout").authenticated()
+                .pathMatchers("/" + apiPrefix + "/**").authenticated()
                 .anyExchange().authenticated()
         );
         http.addFilterBefore(jwtAuthenticationFilter, SecurityWebFiltersOrder.AUTHENTICATION);

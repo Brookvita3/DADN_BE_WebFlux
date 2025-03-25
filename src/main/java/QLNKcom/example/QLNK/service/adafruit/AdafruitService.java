@@ -2,6 +2,7 @@ package QLNKcom.example.QLNK.service.adafruit;
 
 import QLNKcom.example.QLNK.DTO.CreateFeedRequest;
 import QLNKcom.example.QLNK.DTO.CreateGroupRequest;
+import QLNKcom.example.QLNK.DTO.UpdateGroupRequest;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.model.adafruit.Feed;
 import QLNKcom.example.QLNK.model.adafruit.Group;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -114,6 +116,46 @@ public class AdafruitService {
                     }
                     return Mono.error(new CustomAuthException("Failed to delete group on Adafruit: " + response.statusCode(), HttpStatus.BAD_REQUEST));
                 })
+                .toBodilessEntity()
+                .then();
+    }
+
+    public Mono<Void> updateGroup(String username, String apiKey, String oldGroupKey, UpdateGroupRequest request) {
+
+        String formatKey = request.getKey() != null ? request.getKey().replace(" ", "-") : null;
+
+        Map<String, Object> updateBody = new HashMap<>();
+        if (request.getName() != null) {
+            updateBody.put("name", request.getName());
+        }
+        if (request.getDescription() != null) {
+            updateBody.put("description", request.getDescription());
+        }
+        if (formatKey != null) {
+            updateBody.put("key", formatKey);
+        }
+
+        if (updateBody.isEmpty()) {
+            return Mono.empty();
+        }
+
+        log.info("body request to ada: {}", updateBody);
+
+        return webClient.put()
+                .uri("/{username}/groups/{groupKey}", username, oldGroupKey)
+                .header("X-AIO-Key", apiKey)
+                .bodyValue(updateBody)
+                .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, response -> {
+                    if (response.statusCode() == HttpStatus.NOT_FOUND) {
+                        return Mono.error(new CustomAuthException("Group not found on Adafruit", HttpStatus.NOT_FOUND));
+                    } else if (response.statusCode() == HttpStatus.UNAUTHORIZED) {
+                        return Mono.error(new CustomAuthException("Invalid API key", HttpStatus.UNAUTHORIZED));
+                    }
+                    return Mono.error(new CustomAuthException("Failed to update group on Adafruit: " + response.statusCode(), HttpStatus.BAD_REQUEST));
+                })
+                .onStatus(HttpStatusCode::is5xxServerError, response ->
+                        Mono.error(new CustomAuthException("Adafruit server error: " + response.statusCode(), HttpStatus.INTERNAL_SERVER_ERROR)))
                 .toBodilessEntity()
                 .then();
     }

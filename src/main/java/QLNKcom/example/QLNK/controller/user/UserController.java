@@ -15,89 +15,12 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
 @RestController
-@RequestMapping("/users")
+@RequestMapping("${webapp.version}/user")
 @RequiredArgsConstructor
 public class UserController {
 
     private final UserService userService;
 
-    @GetMapping("/me/groups")
-    public Mono<ResponseEntity<ResponseObject>> getGroups() {
-        return ReactiveSecurityContextHolder.getContext()
-                .map(SecurityContext::getAuthentication)
-                .map(Authentication::getName)
-                .flatMap(userService::getAllGroupsByEmail)
-                .map(groups -> ResponseEntity.ok(
-                        ResponseObject.builder()
-                                .message("Get user groups successfully")
-                                .data(groups)
-                                .status(HttpStatus.OK.value())
-                                .build()
-                ));
-    }
 
-    @PostMapping("/me/groups")
-    public Mono<ResponseEntity<ResponseObject>> createGroup(@RequestBody @Valid CreateGroupRequest request) {
-        return ReactiveSecurityContextHolder.getContext()
-                .map(SecurityContext::getAuthentication)
-                .map(Authentication::getName)
-                .flatMap(email -> userService.createGroupByEmail(request, email))
-                .map(group -> ResponseEntity.ok(
-                        ResponseObject.builder()
-                                .message("Create group successfully")
-                                .data(group)
-                                .status(HttpStatus.OK.value())
-                                .build()
-                ));
-    }
-
-    @DeleteMapping("/me/groups/{groupKey}")
-    public Mono<ResponseEntity<ResponseObject>> deleteGroup(@PathVariable String groupKey) {
-        return ReactiveSecurityContextHolder.getContext()
-                .map(SecurityContext::getAuthentication)
-                .map(Authentication::getName)
-                .flatMap(email -> userService.deleteGroup(email, groupKey))
-                .thenReturn( ResponseEntity.ok(
-                        ResponseObject.builder()
-                                .message("Group and its feeds deleted successfully")
-                                .data(null)
-                                .status(HttpStatus.OK.value())
-                                .build()
-                ));
-    }
-
-    @PostMapping("/me/groups/{groupKey}/feeds")
-    public Mono<ResponseEntity<ResponseObject>> createFeed(
-            @PathVariable String groupKey,
-            @RequestBody CreateFeedRequest request) {
-        return ReactiveSecurityContextHolder.getContext()
-                .map(SecurityContext::getAuthentication)
-                .map(Authentication::getName)
-                .flatMap(email -> userService.createFeedForGroup(request, email, groupKey))
-                .map(feed -> ResponseEntity.ok(
-                        ResponseObject.builder()
-                                .message("Feed created and update subscribe successfully")
-                                .data(feed)
-                                .status(HttpStatus.OK.value())
-                                .build()
-                ));
-    }
-
-
-    @DeleteMapping("/me/groups/{groupKey}/feeds/{feedKey}")
-    public Mono<ResponseEntity<ResponseObject>> deleteFeed(
-            @PathVariable String groupKey, @PathVariable String feedKey) {
-        return ReactiveSecurityContextHolder.getContext()
-                .map(SecurityContext::getAuthentication)
-                .map(Authentication::getName)
-                .flatMap(email -> userService.deleteFeed(email, groupKey, feedKey))
-                .thenReturn(ResponseEntity.ok(
-                        ResponseObject.builder()
-                                .message("Feed delete and unsubscribe successfully")
-                                .data(null)
-                                .status(HttpStatus.OK.value())
-                                .build()
-                ));
-    }
 
 }

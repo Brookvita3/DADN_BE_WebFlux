@@ -112,6 +112,7 @@ public class MqttSubscriptionManager {
                         log.info("🗑️ Removed message handler for user {}", user.getUsername());
                     }
                 }
+                else log.info("❌ Topic {} is not subscribed by adapter of user {}", topic, user.getUsername());
             }
         });
     }

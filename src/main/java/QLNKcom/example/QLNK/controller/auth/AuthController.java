@@ -20,7 +20,7 @@ import reactor.core.publisher.Mono;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/auth")
+@RequestMapping("${webapp.version}/auth")
 public class AuthController {
     private final AuthService authService;
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);

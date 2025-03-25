@@ -16,7 +16,7 @@ import reactor.core.publisher.Mono;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/mqtt")
+@RequestMapping("${webapp.version}/api/mqtt")
 public class MqttController {
 
     private final MqttService mqttService;
