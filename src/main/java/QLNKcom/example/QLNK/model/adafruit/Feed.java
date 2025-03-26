@@ -13,4 +13,8 @@ public class Feed {
     private String key;
 
     private String description;
+
+    private Double ceiling;
+
+    private Double floor;
 }

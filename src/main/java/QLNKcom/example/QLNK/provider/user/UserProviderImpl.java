@@ -2,6 +2,7 @@ package QLNKcom.example.QLNK.provider.user;
 
 import QLNKcom.example.QLNK.exception.DataNotFoundException;
 import QLNKcom.example.QLNK.model.User;
+import QLNKcom.example.QLNK.model.adafruit.Feed;
 import QLNKcom.example.QLNK.model.adafruit.Group;
 import QLNKcom.example.QLNK.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -69,6 +70,7 @@ public class UserProviderImpl implements UserProvider {
     }
 
 
+    @Override
     public Mono<Void> updateGroupKey(String userId, String oldGroupKey, String newGroupKey) {
         return findGroupByKey(userId, oldGroupKey)
                 .flatMap(tuple -> {
@@ -94,6 +96,7 @@ public class UserProviderImpl implements UserProvider {
     }
 
 
+    @Override
     public Mono<Void> updateGroupName(String userId, String groupKey, String newName) {
         return findGroupByKey(userId, groupKey)
                 .flatMap(tuple -> {
@@ -113,6 +116,7 @@ public class UserProviderImpl implements UserProvider {
                 .doOnError(e -> log.error("Error updating group name: {}", e.getMessage()));
     }
 
+    @Override
     public Mono<Void> updateGroupDescription(String userId, String groupKey, String newDescription) {
         return findGroupByKey(userId, groupKey)
                 .flatMap(tuple -> {
@@ -131,4 +135,17 @@ public class UserProviderImpl implements UserProvider {
                 })
                 .doOnError(e -> log.error("Error updating group description: {}", e.getMessage()));
     }
+
+    @Override
+    public Mono<Feed> findFeedByKey(String userId, String fullFeedKey) {
+        return findById(userId)
+                .flatMap(user -> Mono.justOrEmpty(user.getGroups().stream()
+                        .flatMap(group -> group.getFeeds().stream())
+                        .filter(feed -> feed.getKey().equals(fullFeedKey))
+                        .findFirst()))
+                .switchIfEmpty(Mono.error(new DataNotFoundException("Feed not found", HttpStatus.NOT_FOUND)))
+                .doOnSuccess(feed -> log.debug("Found feed {} for user {}", fullFeedKey, userId))
+                .doOnError(e -> log.error("Error finding feed {} for user {}: {}", fullFeedKey, userId, e.getMessage()));
+    }
+
 }

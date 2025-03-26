@@ -3,10 +3,13 @@ package QLNKcom.example.QLNK.service.mqtt;
 import QLNKcom.example.QLNK.enums.DeviceType;
 import QLNKcom.example.QLNK.enums.SensorType;
 import QLNKcom.example.QLNK.model.User;
+import QLNKcom.example.QLNK.model.adafruit.Feed;
 import QLNKcom.example.QLNK.model.data.DeviceData;
 import QLNKcom.example.QLNK.model.data.SensorData;
+import QLNKcom.example.QLNK.provider.user.UserProvider;
 import QLNKcom.example.QLNK.repository.DeviceDataRepository;
 import QLNKcom.example.QLNK.repository.SensorDataRepository;
+import QLNKcom.example.QLNK.service.email.EmailService;
 import QLNKcom.example.QLNK.service.websocket.WebSocketSessionManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -21,6 +24,7 @@ import org.springframework.integration.mqtt.outbound.MqttPahoMessageHandler;
 import org.springframework.integration.mqtt.support.DefaultPahoMessageConverter;
 import org.springframework.integration.mqtt.support.MqttHeaders;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 
@@ -34,6 +38,8 @@ public class MqttMessageHandler {
     private final WebSocketSessionManager webSocketSessionManager;
     private final DeviceDataRepository deviceDataRepository;
     private final SensorDataRepository sensorDataRepository;
+    private final EmailService emailService;
+    private final UserProvider userProvider;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private JsonNode parsePayload(String payload) {
@@ -45,7 +51,7 @@ public class MqttMessageHandler {
         }
     }
 
-    private void saveDeviceData(User user, String groupKey, String feedKey, String valueStr, String payload) {
+    private Mono<Void> saveDeviceData(User user, String groupKey, String feedKey, String valueStr, String payload) {
         boolean status = "1".equals(valueStr) || "true".equalsIgnoreCase(valueStr);
         DeviceData deviceData = DeviceData.builder()
                 .username(user.getUsername())
@@ -55,13 +61,13 @@ public class MqttMessageHandler {
                 .timeStamp(Instant.now())
                 .build();
 
-        deviceDataRepository.save(deviceData)
+        return deviceDataRepository.save(deviceData)
                 .doOnSuccess(savedData -> webSocketSessionManager.sendToUser(user.getId(), payload))
                 .doOnError(error -> log.error("❌ Error saving Device Data: {}", error.getMessage()))
-                .subscribe();
+                .then();
     }
 
-    private void saveSensorData(User user, String groupKey, String feedKey, String valueStr, String payload) {
+    private Mono<Void> saveSensorData(User user, String groupKey, String feedKey, String valueStr, String payload) {
         try {
             double value = Double.parseDouble(valueStr);
             SensorData sensorData = SensorData.builder()
@@ -72,15 +78,85 @@ public class MqttMessageHandler {
                     .timeStamp(Instant.now())
                     .build();
 
-            sensorDataRepository.save(sensorData)
+            return sensorDataRepository.save(sensorData)
                     .doOnSuccess(savedData -> webSocketSessionManager.sendToUser(user.getId(), payload))
                     .doOnError(error -> log.error("❌ Error saving Sensor Data: {}", error.getMessage()))
-                    .subscribe();
+                    .then();
         } catch (NumberFormatException e) {
             log.error("❌ Invalid sensor data: {}", payload);
+            return Mono.empty();
         }
     }
 
+    private Mono<Void> saveData(User user, String groupKey, String feedKey, String value, String payload) {
+        if (DeviceType.isDevice(feedKey)) {
+            return saveDeviceData(user, groupKey, feedKey, value, payload);
+        } else if (SensorType.isSensor(feedKey)) {
+            return saveSensorData(user, groupKey, feedKey, value, payload);
+        } else {
+            log.warn("⚠️ Unrecognized feedKey: {}", feedKey);
+            return Mono.empty();
+        }
+    }
+
+    private Mono<Void> processMessage(User user, String topic, String payload) {
+        String[] parts = topic.split("/");
+        if (parts.length < 4) {
+            log.warn("⚠️ Invalid topic format: {}", topic);
+            return Mono.empty();
+        }
+
+        String[] groupAndFeed = parts[2].split("\\.");
+        if (groupAndFeed.length < 2) {
+            log.warn("⚠️ Invalid feed format: {}", parts[2]);
+            return Mono.empty();
+        }
+
+        String groupKey = groupAndFeed[0];
+        String feedKey = groupAndFeed[1];
+        String fullFeedKey = groupKey + "." + feedKey;
+
+        return Mono.just(payload)
+                .map(this::parsePayload)
+                .flatMap(dataNode -> {
+                    if (dataNode == null || dataNode.get("value") == null) { // Adjusted for your payload
+                        log.warn("⚠️ Missing 'data.value' in payload: {}", payload);
+                        return Mono.empty();
+                    }
+
+                    String valueStr = dataNode.get("value").asText();
+                    double value;
+                    try {
+                        value = Double.parseDouble(valueStr);
+                    } catch (NumberFormatException e) {
+                        log.warn("⚠️ Invalid value format in payload: {}", valueStr);
+                        return Mono.empty();
+                    }
+
+                    return userProvider.findFeedByKey(user.getId(), fullFeedKey)
+                            .flatMap(feed -> checkAndAlert(user, feed, value))
+                            .then(saveData(user, groupKey, feedKey, valueStr, payload));
+                });
+    }
+
+    private Mono<Void> checkAndAlert(User user, Feed feed, double value) {
+        Double ceiling = feed.getCeiling();
+        Double floor = feed.getFloor();
+        String feedName = feed.getName();
+
+        if (ceiling != null && value > ceiling) {
+            String subject = "Alert: " + feedName + " Exceeded Upper Threshold";
+            String text = String.format("The %s value (%.1f) has exceeded the upper threshold of %.1f.", feedName, value, ceiling);
+            return emailService.sendEmail(user.getEmail(), subject, text)
+                    .doOnSuccess(v -> log.info("Sent email alert for {} exceeding ceiling: {} > {}", feedName, value, ceiling));
+        } else if (floor != null && value < floor) {
+            String subject = "Alert: " + feedName + " Below Lower Threshold";
+            String text = String.format("The %s value (%.1f) has fallen below the lower threshold of %.1f.", feedName, value, floor);
+            return emailService.sendEmail(user.getEmail(), subject, text)
+                    .doOnSuccess(v -> log.info("Sent email alert for {} below floor: {} < {}", feedName, value, floor));
+        }
+        return Mono.empty();
+    }
 
     public void attachHandler(MqttPahoMessageDrivenChannelAdapter adapter, User user) {
         DirectChannel mqttChannel = new DirectChannel();
@@ -96,37 +172,10 @@ public class MqttMessageHandler {
             }
 
             log.info("🔔 MQTT Received from topic {}: {}", topic, payload);
-
-            String[] parts = topic.split("/");
-            if (parts.length < 4) {
-                log.warn("⚠️ Invalid topic format: {}", topic);
-                return;
-            }
-
-            String[] groupAndFeed = parts[2].split("\\.");
-            if (groupAndFeed.length < 2) {
-                log.warn("⚠️ Invalid feed format: {}", parts[2]);
-                return;
-            }
-
-            String groupKey = groupAndFeed[0];
-            String feedKey = groupAndFeed[1];
-            JsonNode dataNode = parsePayload(payload);
-            if (dataNode == null || dataNode.get("value") == null) {
-                log.warn("⚠️ Missing 'data.value' in payload: {}", payload);
-                return;
-            }
-
-            String valueStr = dataNode.get("value").asText();
-
-            if (DeviceType.isDevice(feedKey)) {
-                saveDeviceData(user, groupKey, feedKey, valueStr, payload);
-            } else if (SensorType.isSensor(feedKey)) {
-                saveSensorData(user, groupKey, feedKey, valueStr, payload);
-            } else {
-                log.warn("⚠️ Unrecognized feedKey: {}", feedKey);
-            }
-            //webSocketSessionManager.sendToUser(user.getId(), payload);
+            processMessage(user, topic, payload).subscribe(
+                    v -> {},
+                    e -> log.error("Error processing MQTT message from topic {}: {}", topic, e.getMessage())
+            );
         });
     }
 

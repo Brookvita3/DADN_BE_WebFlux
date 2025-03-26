@@ -83,7 +83,14 @@ public class AdafruitService {
                 .header("X-AIO-Key", apiKey)
                 .bodyValue(request)
                 .retrieve()
-                .bodyToMono(Feed.class);
+                .bodyToMono(Feed.class)
+                .map(feed -> {
+                    feed.setCeiling(request.getCeiling());
+                    feed.setFloor(request.getFloor());
+                    return feed;
+                })
+                .doOnSuccess(feed -> log.info("Created feed {} on Adafruit for group {}", feed.getKey(), groupKey))
+                .doOnError(e -> log.error("Failed to create feed on Adafruit: {}", e.getMessage()));
     }
 
     public  Mono<Void> deleteFeed(String username, String apiKey, String feedKey) {
