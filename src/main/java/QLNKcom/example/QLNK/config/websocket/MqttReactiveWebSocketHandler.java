@@ -1,4 +1,4 @@
-package QLNKcom.example.QLNK.service.websocket;
+package QLNKcom.example.QLNK.config.websocket;
 
 import QLNKcom.example.QLNK.config.jwt.JwtUtils;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
@@ -6,6 +6,7 @@ import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.provider.user.UserProvider;
 import QLNKcom.example.QLNK.service.mqtt.MqttService;
 import QLNKcom.example.QLNK.service.redis.RedisService;
+import QLNKcom.example.QLNK.service.websocket.WebSocketSessionManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketSession;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Component
@@ -29,27 +32,32 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
 
     @Override
     public Mono<Void> handle(WebSocketSession session) {
-        return extractToken(session)
+        return session.getHandshakeInfo()
+                .getPrincipal()
+                .flatMap(principal -> userProvider.findByEmail(principal.getName()).map(User::getId)
+                        .flatMap(userid -> establishWebSocketSession(userid, session)));
+    }
+
+    public Mono<ServerWebExchange> handleHandshake(ServerWebExchange exchange) {
+        return extractToken(exchange)
+                .switchIfEmpty(Mono.error(new CustomAuthException("No token provided", HttpStatus.UNAUTHORIZED)))
                 .flatMap(token -> extractEmailFromToken(token)
                         .flatMap(email -> validateTokenWithRedis(token, email)))
                 .flatMap(userProvider::findByEmail)
                 .map(User::getId)
-                .flatMap(userId -> establishWebSocketSession(userId, session))
+                .doOnSuccess(userId -> exchange.getAttributes().put("userId", userId))
+                .thenReturn(exchange)
                 .doOnError(error -> {
-                    Mono.error(new CustomAuthException("Error occur when validate token in handshake", HttpStatus.BAD_REQUEST));
-                    session.close();
-                })
-                .switchIfEmpty(session.close());
+                    throw new CustomAuthException("Authentication failed", HttpStatus.UNAUTHORIZED);
+                });
     }
 
-    private Mono<String> extractToken(WebSocketSession session) {
-        return Mono.justOrEmpty(session.getHandshakeInfo().getHeaders().getFirst("Authorization"))
-                .filter(authHeader -> authHeader.startsWith("Bearer "))
-                .map(authHeader -> authHeader.replace("Bearer ", ""))
-                .switchIfEmpty(Mono.defer(() -> {
-                    log.warn("❌ No valid Authorization header, closing WebSocket");
-                    return Mono.empty();
-                }));
+    private Mono<String> extractToken(ServerWebExchange exchange) {
+        String token = exchange.getRequest().getHeaders().getFirst("Authorization");
+        if (token != null && token.startsWith("Bearer ")) {
+            return Mono.just(token.substring(7));
+        }
+        return Mono.empty();
     }
 
     private Mono<String> extractEmailFromToken(String token) {
@@ -59,6 +67,7 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
                     return Mono.empty();
                 });
     }
+
     private Mono<String> validateTokenWithRedis(String token, String email) {
         String redisKey = "refresh:iat:" + email;
         return redisService.getValue(redisKey)
@@ -85,20 +94,30 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
         String type = session.getHandshakeInfo().getUri().getQuery();
         String feed = (type != null && type.startsWith("key=")) ? type.substring(4) : null;
 
-        return Mono.firstWithSignal(
-                        session.receive()
-                                .doOnError(error -> log.error("❌ WebSocket error for user {}: {}", userId, error.getMessage(), error))
-                                .flatMap(message -> handleWebSocketMessage(userId, feed, message.getPayloadAsText()))
-                                .then(),
-                        session.send(sessionManager.getUserFlux(userId)
-                                .filter(json -> shouldSendData(json, feed))
-                                .map(session::textMessage))
-                )
+        // Handle incoming messages as a Flux
+        Flux<Void> receiveFlux = session.receive()
+                .doOnNext(message -> log.info("📨 Received message from user {}: {}", userId, message.getPayloadAsText()))
+                .flatMap(message -> handleWebSocketMessage(userId, feed, message.getPayloadAsText())
+                        .onErrorResume(e -> {
+                            log.error("❌ Error handling message for user {}: {}", userId, e.getMessage(), e);
+                            return Mono.empty(); // Continue processing next messages
+                        }))
+                .doOnError(error -> log.error("❌ WebSocket receive error for user {}: {}", userId, error.getMessage(), error))
+                .map(message -> null); // Convert to Flux<Void> without completing
+
+        // Handle outgoing messages as a Flux
+        Mono<Void> sendFlux = session.send(sessionManager.getUserFlux(userId)
+                        .filter(json -> shouldSendData(json, feed))
+                        .map(session::textMessage))
+                .doOnError(error -> log.error("❌ Send error for user {}: {}", userId, error.getMessage(), error));
+
+        // Merge receive and send pipelines, keep session alive until client disconnects or error
+        return Flux.merge(receiveFlux, sendFlux)
+                .then()
                 .doFinally(signalType -> {
                     log.info("🔴 WebSocket disconnected: user {} (Reason: {})", userId, signalType);
                     sessionManager.removeSession(userId);
-                })
-                .then();
+                });
     }
 
     private Mono<Void> handleWebSocketMessage(String userId, String feed, String message) {
