@@ -37,16 +37,19 @@ public class MqttSubscriptionManager {
                 });
     }
 
-    public Mono<Void> updateSubscription(User user, String feed) {
+    /**
+     * @param  topic  the topic must have format username/feeds/feedKey/json
+     */
+    public Mono<Void> updateSubscription(User user, String topic) {
         String clientId = "mqtt-" + user.getId();
         MqttPahoMessageDrivenChannelAdapter adapter = activeSubscribers.get(clientId);
         if (adapter == null) {
             log.warn("No active subscription found for user {}, subscribing instead", user.getUsername());
-            return subscribeFeed(user, Collections.singletonList(feed));
+            return subscribeFeed(user, Collections.singletonList(topic));
         }
 
-        return updateAdapterTopics(adapter, feed, user)
-                .doOnSuccess(v -> log.info("✅ Updated subscription for user {} to feeds: {}", user.getUsername(), feed))
+        return updateAdapterTopics(adapter, topic, user)
+                .doOnSuccess(v -> log.info("✅ Updated subscription for user {} to feeds: {}", user.getUsername(), topic))
                 .onErrorResume(e -> {
                     log.error("❌ Failed to update subscription for user {}: {}", user.getId(), e.getMessage());
                     return Mono.empty();
@@ -92,6 +95,9 @@ public class MqttSubscriptionManager {
         });
     }
 
+    /**
+     * @param  topic  the topic must have format username/feeds/feedKey/json
+     */
     public Mono<Void> unsubscribeFeed(User user, String topic) {
         String clientId = "mqtt-" + user.getId();
         MqttPahoMessageDrivenChannelAdapter adapter = activeSubscribers.get(clientId);

@@ -2,6 +2,7 @@ package QLNKcom.example.QLNK.service.adafruit;
 
 import QLNKcom.example.QLNK.DTO.CreateFeedRequest;
 import QLNKcom.example.QLNK.DTO.CreateGroupRequest;
+import QLNKcom.example.QLNK.DTO.UpdateFeedRequest;
 import QLNKcom.example.QLNK.DTO.UpdateGroupRequest;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.model.adafruit.Feed;
@@ -9,8 +10,9 @@ import QLNKcom.example.QLNK.model.adafruit.Group;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
@@ -25,18 +27,34 @@ public class AdafruitService {
     private final WebClient webClient;
 
     public AdafruitService(@Value("${http.adafruit.url}") String adaUrl) {
-        this.webClient = WebClient.builder().baseUrl(adaUrl).build();
+        this.webClient = WebClient.builder()
+                .baseUrl(adaUrl)
+                .filter(ExchangeFilterFunction.ofResponseProcessor(this::handleResponseErrors))
+                .build();
     }
 
-    public Mono<List<Feed>> getUserFeeds(String username, String apiKey) {
-        return webClient.get()
-                .uri("/{username}/feeds/", username)
-                .header("X-AIO-Key", apiKey)
-                .retrieve()
-                .bodyToFlux(Feed.class)
-                .collectList()
-                .doOnNext(feeds -> log.info("Fetched {} feeds for user {}", feeds.size(), username));
+    private Mono<ClientResponse> handleResponseErrors(ClientResponse response) {
+        if (response.statusCode().is4xxClientError() || response.statusCode().is5xxServerError()) {
+            return response.bodyToMono(String.class)
+                    .defaultIfEmpty("No error details provided")
+                    .flatMap(body -> {
+                        HttpStatus status = HttpStatus.valueOf(response.statusCode().value());
+                        String message;
+                        if (status == HttpStatus.NOT_FOUND) {
+                            message = "Resource not found on Adafruit: " + body;
+                        } else if (status == HttpStatus.UNAUTHORIZED) {
+                            message = "Invalid API key: " + body;
+                        } else if (response.statusCode().is5xxServerError()) {
+                            message = "Adafruit server error (" + status + "): " + body;
+                        } else {
+                            message = "Client error from Adafruit (" + status + "): " + body;
+                        }
+                        return Mono.error(new CustomAuthException(message, status));
+                    });
+        }
+        return Mono.just(response);
     }
+
 
     public Mono<List<Group>> getUserGroups(String username, String apiKey) {
         return webClient.get()
@@ -48,15 +66,6 @@ public class AdafruitService {
                 .doOnNext(groups -> log.info("Fetched {} groups for user {}", groups.size(), username));
     }
 
-    public Mono<List<Group>> createUserFeed(String username, String apiKey) {
-        return webClient.get()
-                .uri("/{username}/groups/", username)
-                .header("X-AIO-Key", apiKey)
-                .retrieve()
-                .bodyToFlux(Group.class)
-                .collectList()
-                .doOnNext(groups -> log.info("Fetched {} groups for user {}", groups.size(), username));
-    }
 
     public Mono<Group> createUserGroup(String username, String apiKey, CreateGroupRequest groupRequest) {
 
@@ -89,41 +98,26 @@ public class AdafruitService {
                     feed.setFloor(request.getFloor());
                     return feed;
                 })
-                .doOnSuccess(feed -> log.info("Created feed {} on Adafruit for group {}", feed.getKey(), groupKey))
-                .doOnError(e -> log.error("Failed to create feed on Adafruit: {}", e.getMessage()));
+                .doOnSuccess(feed -> log.info("✅ Created feed {} on Adafruit for group {}", feed.getKey(), groupKey));
     }
 
-    public  Mono<Void> deleteFeed(String username, String apiKey, String feedKey) {
+    public Mono<Void> deleteFeed(String username, String apiKey, String feedKey) {
         return webClient.delete()
                 .uri("/{username}/feeds/{feed_key}", username, feedKey)
                 .header("X-AIO-Key", apiKey)
                 .retrieve()
-                .onStatus(HttpStatusCode::is4xxClientError, response -> {
-                    if (response.statusCode() == HttpStatus.NOT_FOUND) {
-                        return Mono.error(new CustomAuthException("Feed not found on Adafruit", HttpStatus.NOT_FOUND));
-                    } else if (response.statusCode() == HttpStatus.UNAUTHORIZED) {
-                        return Mono.error(new CustomAuthException("Invalid API key", HttpStatus.UNAUTHORIZED));
-                    }
-                    return Mono.error(new CustomAuthException("Failed to delete feed on Adafruit: " + response.statusCode(), HttpStatus.BAD_REQUEST));
-                })
                 .toBodilessEntity()
+                .doOnSuccess(voidResponseEntity -> log.info("✅ Delete feed successfully on adafruit"))
                 .then();
     }
 
-    public  Mono<Void> deleteGroup(String username, String apiKey, String groupKey) {
+    public Mono<Void> deleteGroup(String username, String apiKey, String groupKey) {
         return webClient.delete()
                 .uri("/{username}/groups/{group_key}", username, groupKey)
                 .header("X-AIO-Key", apiKey)
                 .retrieve()
-                .onStatus(HttpStatusCode::is4xxClientError, response -> {
-                    if (response.statusCode() == HttpStatus.NOT_FOUND) {
-                        return Mono.error(new CustomAuthException("Group not found on Adafruit", HttpStatus.NOT_FOUND));
-                    } else if (response.statusCode() == HttpStatus.UNAUTHORIZED) {
-                        return Mono.error(new CustomAuthException("Invalid API key", HttpStatus.UNAUTHORIZED));
-                    }
-                    return Mono.error(new CustomAuthException("Failed to delete group on Adafruit: " + response.statusCode(), HttpStatus.BAD_REQUEST));
-                })
                 .toBodilessEntity()
+                .doOnSuccess(voidResponseEntity -> log.info("✅ Delete group successfully on adafruit"))
                 .then();
     }
 
@@ -153,17 +147,31 @@ public class AdafruitService {
                 .header("X-AIO-Key", apiKey)
                 .bodyValue(updateBody)
                 .retrieve()
-                .onStatus(HttpStatusCode::is4xxClientError, response -> {
-                    if (response.statusCode() == HttpStatus.NOT_FOUND) {
-                        return Mono.error(new CustomAuthException("Group not found on Adafruit", HttpStatus.NOT_FOUND));
-                    } else if (response.statusCode() == HttpStatus.UNAUTHORIZED) {
-                        return Mono.error(new CustomAuthException("Invalid API key", HttpStatus.UNAUTHORIZED));
-                    }
-                    return Mono.error(new CustomAuthException("Failed to update group on Adafruit: " + response.statusCode(), HttpStatus.BAD_REQUEST));
-                })
-                .onStatus(HttpStatusCode::is5xxServerError, response ->
-                        Mono.error(new CustomAuthException("Adafruit server error: " + response.statusCode(), HttpStatus.INTERNAL_SERVER_ERROR)))
                 .toBodilessEntity()
+                .doOnSuccess(voidResponseEntity -> log.info("✅ Update group successfully on adafruit"))
                 .then();
+    }
+
+    public Mono<Feed> updateFeed(String username, String apiKey, String groupKey, String oldFullFeedKey, UpdateFeedRequest request) {
+        String feedKey = request.getKey();
+        Map<String, Object> requestBody = Map.of(
+                "name", request.getName(),
+                "description", request.getDescription(),
+                "key", feedKey
+        );
+
+        return webClient.put()
+                .uri("/{username}/feeds/{feedKey}", username, oldFullFeedKey)
+                .header("X-AIO-Key", apiKey)
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(Feed.class)
+                .map(feed -> {
+                    feed.setKey(feedKey);
+                    feed.setCeiling(request.getCeiling());
+                    feed.setFloor(request.getFloor());
+                    return feed;
+                })
+                .doOnSuccess(feed -> log.info("✅ Update feed {} on Adafruit for group {}", feed.getKey(), groupKey));
     }
 }

@@ -37,20 +37,27 @@ public class UserProviderImpl implements UserProvider {
     }
 
     @Override
-    public Mono<User> findByUsername(String username) {
-        System.out.println("🚀 Finding user: " + username);
-        return userRepository.findByUsername(username)
-                .switchIfEmpty(Mono.error(new DataNotFoundException("User not found", HttpStatus.NOT_FOUND)));
-    }
-
-    @Override
-    public Mono<Tuple2<User, Group>> findGroupByKey(String userId, String groupKey) {
+    public Mono<Tuple2<User, Group>> findUserAndGroup(String userId, String groupKey) {
         return findById(userId)
                 .flatMap(user -> Mono.justOrEmpty(user.getGroups().stream()
                                 .filter(g -> g.getKey().equals(groupKey))
                                 .findFirst())
                         .map(group -> Tuples.of(user, group))
                         .switchIfEmpty(Mono.error(new DataNotFoundException("Group not found: " + groupKey, HttpStatus.NOT_FOUND))));
+    }
+
+    @Override
+    public Mono<Tuple2<Group, Feed>> findGroupAndFeed(String userId, String groupKey, String fullFeedKey) {
+        return  findById(userId)
+                .flatMap(user -> Mono.justOrEmpty(user.getGroups().stream()
+                                .filter(g -> g.getKey().equals(groupKey))
+                                .findFirst())
+                        .switchIfEmpty(Mono.error(new DataNotFoundException("Group not found: " + groupKey, HttpStatus.NOT_FOUND)))
+                        .flatMap(group -> Mono.justOrEmpty(group.getFeeds().stream()
+                                        .filter(f -> f.getKey().equals(fullFeedKey))
+                                        .findFirst())
+                                .switchIfEmpty(Mono.error(new DataNotFoundException("Feed not found: " + fullFeedKey, HttpStatus.NOT_FOUND)))
+                                .map(feed -> Tuples.of(group, feed))));
     }
 
     @Override
@@ -72,7 +79,7 @@ public class UserProviderImpl implements UserProvider {
 
     @Override
     public Mono<Void> updateGroupKey(String userId, String oldGroupKey, String newGroupKey) {
-        return findGroupByKey(userId, oldGroupKey)
+        return findUserAndGroup(userId, oldGroupKey)
                 .flatMap(tuple -> {
                     User user = tuple.getT1();
                     Group group = tuple.getT2();
@@ -98,7 +105,7 @@ public class UserProviderImpl implements UserProvider {
 
     @Override
     public Mono<Void> updateGroupName(String userId, String groupKey, String newName) {
-        return findGroupByKey(userId, groupKey)
+        return findUserAndGroup(userId, groupKey)
                 .flatMap(tuple -> {
                     User user = tuple.getT1();
                     Group group = tuple.getT2();
@@ -118,7 +125,7 @@ public class UserProviderImpl implements UserProvider {
 
     @Override
     public Mono<Void> updateGroupDescription(String userId, String groupKey, String newDescription) {
-        return findGroupByKey(userId, groupKey)
+        return findUserAndGroup(userId, groupKey)
                 .flatMap(tuple -> {
                     User user = tuple.getT1();
                     Group group = tuple.getT2();

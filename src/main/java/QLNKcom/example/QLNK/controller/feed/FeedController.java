@@ -1,8 +1,10 @@
 package QLNKcom.example.QLNK.controller.feed;
 
 import QLNKcom.example.QLNK.DTO.CreateFeedRequest;
+import QLNKcom.example.QLNK.DTO.UpdateFeedRequest;
 import QLNKcom.example.QLNK.response.ResponseObject;
 import QLNKcom.example.QLNK.service.user.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -38,17 +40,33 @@ public class FeedController {
     }
 
 
-    @DeleteMapping("/{groupKey}/feeds/{feedKey}")
+    @DeleteMapping("/{groupKey}/feeds/{fullFeedKey}")
     public Mono<ResponseEntity<ResponseObject>> deleteFeed(
-            @PathVariable String groupKey, @PathVariable String feedKey) {
+            @PathVariable String groupKey, @PathVariable String fullFeedKey) {
         return ReactiveSecurityContextHolder.getContext()
                 .map(SecurityContext::getAuthentication)
                 .map(Authentication::getName)
-                .flatMap(email -> userService.deleteFeed(email, groupKey, feedKey))
+                .flatMap(email -> userService.deleteFeed(email, groupKey, fullFeedKey))
                 .thenReturn(ResponseEntity.ok(
                         ResponseObject.builder()
                                 .message("Feed delete and unsubscribe successfully")
                                 .data(null)
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ));
+    }
+
+    @PutMapping("/{groupKey}/feeds/{fullFeedKey}")
+    public Mono<ResponseEntity<ResponseObject>> updateFeed(
+            @PathVariable String groupKey, @PathVariable String fullFeedKey, @RequestBody @Valid UpdateFeedRequest request) {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getName)
+                .flatMap(email -> userService.updateFeedForGroup(email, groupKey, fullFeedKey, request))
+                .map(feed -> ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Update feed successfully")
+                                .data(feed)
                                 .status(HttpStatus.OK.value())
                                 .build()
                 ));
