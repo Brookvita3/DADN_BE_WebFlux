@@ -54,7 +54,7 @@ public class JwtAuthenticationFilter implements WebFilter {
     private Mono<SecurityContext> validateTokenAndSetSecurityContext(String email, String accessToken) {
         return getRedisRefreshTokenIat(email)
                 .flatMap(refreshTokenIat -> Mono.fromCallable(() ->
-                        jwtUtils.validateAccessToken(accessToken, refreshTokenIat / 1000)
+                        jwtUtils.validateAccessToken(accessToken, refreshTokenIat)
                 ))
                 .flatMap(isValid -> isValid ? createSecurityContext(email)
                         : Mono.error(new CustomAuthException("Invalid token", HttpStatus.UNAUTHORIZED)));
