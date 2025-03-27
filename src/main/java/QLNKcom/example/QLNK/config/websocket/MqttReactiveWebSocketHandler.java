@@ -12,12 +12,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketSession;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -34,9 +37,13 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
     public Mono<Void> handle(WebSocketSession session) {
         return session.getHandshakeInfo()
                 .getPrincipal()
-                .flatMap(principal -> userProvider.findByEmail(principal.getName()).map(User::getId)
-                        .flatMap(userid -> establishWebSocketSession(userid, session)));
-    }
+                .flatMap(principal -> {
+                    String email = principal.getName();
+                    return userProvider.findByEmail(email)
+                            .map(User::getId)
+                            .flatMap(userId -> establishWebSocketSession(userId, session));
+                })
+                .switchIfEmpty(Mono.error(new CustomAuthException("No principal found", HttpStatus.UNAUTHORIZED)));    }
 
     public Mono<ServerWebExchange> handleHandshake(ServerWebExchange exchange) {
         return extractToken(exchange)
@@ -44,8 +51,16 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
                 .flatMap(token -> extractEmailFromToken(token)
                         .flatMap(email -> validateTokenWithRedis(token, email)))
                 .flatMap(userProvider::findByEmail)
-                .map(User::getId)
-                .doOnSuccess(userId -> exchange.getAttributes().put("userId", userId))
+                .flatMap(user -> {
+                    String userId = user.getId();
+                    exchange.getAttributes().put("userId", userId);
+                    return Mono.just(new UsernamePasswordAuthenticationToken(
+                            user.getEmail(), // Principal name as email since that's what security expects
+                            null,
+                            List.of(() -> "ROLE_USER") // Add authorities if needed
+                    ));
+                })
+                .doOnSuccess(principal -> exchange.getAttributes().put("java.security.Principal", principal))
                 .thenReturn(exchange)
                 .doOnError(error -> {
                     throw new CustomAuthException("Authentication failed", HttpStatus.UNAUTHORIZED);
@@ -102,8 +117,7 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
                             log.error("❌ Error handling message for user {}: {}", userId, e.getMessage(), e);
                             return Mono.empty(); // Continue processing next messages
                         }))
-                .doOnError(error -> log.error("❌ WebSocket receive error for user {}: {}", userId, error.getMessage(), error))
-                .map(message -> null); // Convert to Flux<Void> without completing
+                .doOnError(error -> log.error("❌ WebSocket receive error for user {}: {}", userId, error.getMessage(), error));
 
         // Handle outgoing messages as a Flux
         Mono<Void> sendFlux = session.send(sessionManager.getUserFlux(userId)

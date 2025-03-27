@@ -181,102 +181,30 @@ public class UserService {
     }
 
 
-//    public Mono<Feed> updateFeedForGroup(String email, String groupKey, String oldFullFeedKey, UpdateFeedRequest request) {
-//        String newFullFeedKey = groupKey + "." + request.getKey();
-//
-//        return userProvider.findByEmail(email)
-//                .flatMap(user -> userProvider.findGroupAndFeed(user.getId(), groupKey, oldFullFeedKey)
-//                        .flatMap(groupAndFeed -> {
-//                            Group group = groupAndFeed.getT1();
-//                            Feed feed = groupAndFeed.getT2();
-//
-//                            // Log original state
-//                            log.debug("Before update - User groups: {}", user.getGroups());
-//                            log.debug("Before update - Feed: {}", feed);
-//
-//                            // Update local feed properties
-//                            feed.setName(request.getName());
-//                            feed.setDescription(request.getDescription());
-//                            feed.setKey(newFullFeedKey);
-//                            feed.setFloor(request.getFloor());
-//                            feed.setCeiling(request.getCeiling());
-//
-//                            // Log updated state
-//                            log.debug("After update - Feed: {}", feed);
-//                            log.debug("After update - User groups: {}", user.getGroups());
-//
-//                            // Sync with Adafruit IO
-//                            return adafruitService.updateFeed(
-//                                    user.getUsername(),
-//                                    user.getApikey(),
-//                                    groupKey,
-//                                    oldFullFeedKey,
-//                                    request
-//                            ).then(Mono.defer(() -> {
-//                                // Update MQTT if key changed
-//                                if (!oldFullFeedKey.equals(newFullFeedKey)) {
-//                                    String oldTopic = user.getUsername() + "/feeds/" + oldFullFeedKey + "/json";
-//                                    String newTopic = user.getUsername() + "/feeds/" + newFullFeedKey + "/json";
-//                                    return mqttSubscriptionManager.unsubscribeFeed(user, oldTopic)
-//                                            .then(mqttSubscriptionManager.updateSubscription(user, newTopic));
-//                                }
-//
-//                                return Mono.empty();
-//                            })).then(userProvider.saveUser(user)
-//                                    .doOnSuccess(savedUser -> {
-//                                        log.info("Saved user {} with updated feed {}", user.getId(), newFullFeedKey);
-//                                        log.debug("Saved user groups: {}", savedUser.getGroups());
-//                                    })
-//                                    .thenReturn(feed));
-//                        }))
-//                .doOnSuccess(feed -> log.info("Updated feed {} to {} for user {}", oldFullFeedKey, newFullFeedKey, email))
-//                .doOnError(e -> log.error("Error updating feed for {}: {}", email, e.getMessage()));
-//    }
-
-
-
     public Mono<Feed> updateFeedForGroup(String email, String groupKey, String oldFullFeedKey, UpdateFeedRequest request) {
         String newFullFeedKey = groupKey + "." + request.getKey();
 
         return userProvider.findByEmail(email)
-                .flatMap(user -> {
-                    // Find the group and feed directly from user.getGroups()
-                    Group group = user.getGroups().stream()
-                            .filter(g -> g.getKey().equals(groupKey))
-                            .findFirst()
-                            .orElseThrow(() -> new RuntimeException("Group not found: " + groupKey));
-
-                    Feed feed = group.getFeeds().stream()
-                            .filter(f -> f.getKey().equals(oldFullFeedKey))
-                            .findFirst()
-                            .orElseThrow(() -> new RuntimeException("Feed not found: " + oldFullFeedKey));
-
-                    // Update feed properties
-                    feed.setName(request.getName());
-                    feed.setDescription(request.getDescription());
-                    feed.setKey(newFullFeedKey);
-                    feed.setFloor(request.getFloor());
-                    feed.setCeiling(request.getCeiling());
-
-                    // Sync with Adafruit
-                    return adafruitService.updateFeed(
-                                    user.getUsername(),
-                                    user.getApikey(),
-                                    groupKey,
-                                    oldFullFeedKey,
-                                    request
-                            ).then(Mono.defer(() -> {
-                                // Update MQTT if key changed
-                                if (!oldFullFeedKey.equals(newFullFeedKey)) {
-                                    String oldTopic = user.getUsername() + "/feeds/" + oldFullFeedKey + "/json";
-                                    String newTopic = user.getUsername() + "/feeds/" + newFullFeedKey + "/json";
-                                    return mqttSubscriptionManager.unsubscribeFeed(user, oldTopic)
-                                            .then(mqttSubscriptionManager.updateSubscription(user, newTopic));
-                                }
-                                return Mono.empty();
-                            })).then(userProvider.saveUser(user))
-                            .thenReturn(feed);
-                })
+                .flatMap(user -> userProvider.updateFeedInGroup(user, groupKey, oldFullFeedKey, request)
+                        .flatMap(feed -> {
+                            // Sync with Adafruit
+                            return adafruitService.updateFeed(
+                                            user.getUsername(),
+                                            user.getApikey(),
+                                            groupKey,
+                                            oldFullFeedKey,
+                                            request
+                                    ).then(Mono.defer(() -> {
+                                        if (!oldFullFeedKey.equals(newFullFeedKey)) {
+                                            String oldTopic = user.getUsername() + "/feeds/" + oldFullFeedKey + "/json";
+                                            String newTopic = user.getUsername() + "/feeds/" + newFullFeedKey + "/json";
+                                            return mqttSubscriptionManager.unsubscribeFeed(user, oldTopic)
+                                                    .then(mqttSubscriptionManager.updateSubscription(user, newTopic));
+                                        }
+                                        return Mono.empty();
+                                    })).then(userProvider.saveUser(user))
+                                    .thenReturn(feed);
+                        }))
                 .doOnSuccess(feed -> log.info("Updated feed {} to {} for user {}", oldFullFeedKey, newFullFeedKey, email))
                 .doOnError(e -> log.error("Error updating feed for {}: {}", email, e.getMessage()));
     }

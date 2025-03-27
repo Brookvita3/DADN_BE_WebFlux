@@ -1,5 +1,6 @@
 package QLNKcom.example.QLNK.provider.user;
 
+import QLNKcom.example.QLNK.DTO.UpdateFeedRequest;
 import QLNKcom.example.QLNK.exception.DataNotFoundException;
 import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.model.adafruit.Feed;
@@ -44,20 +45,6 @@ public class UserProviderImpl implements UserProvider {
                                 .findFirst())
                         .map(group -> Tuples.of(user, group))
                         .switchIfEmpty(Mono.error(new DataNotFoundException("Group not found: " + groupKey, HttpStatus.NOT_FOUND))));
-    }
-
-    @Override
-    public Mono<Tuple2<Group, Feed>> findGroupAndFeed(String userId, String groupKey, String fullFeedKey) {
-        return  findById(userId)
-                .flatMap(user -> Mono.justOrEmpty(user.getGroups().stream()
-                                .filter(g -> g.getKey().equals(groupKey))
-                                .findFirst())
-                        .switchIfEmpty(Mono.error(new DataNotFoundException("Group not found: " + groupKey, HttpStatus.NOT_FOUND)))
-                        .flatMap(group -> Mono.justOrEmpty(group.getFeeds().stream()
-                                        .filter(f -> f.getKey().equals(fullFeedKey))
-                                        .findFirst())
-                                .switchIfEmpty(Mono.error(new DataNotFoundException("Feed not found: " + fullFeedKey, HttpStatus.NOT_FOUND)))
-                                .map(feed -> Tuples.of(group, feed))));
     }
 
     @Override
@@ -153,6 +140,31 @@ public class UserProviderImpl implements UserProvider {
                 .switchIfEmpty(Mono.error(new DataNotFoundException("Feed not found", HttpStatus.NOT_FOUND)))
                 .doOnSuccess(feed -> log.debug("Found feed {} for user {}", fullFeedKey, userId))
                 .doOnError(e -> log.error("Error finding feed {} for user {}: {}", fullFeedKey, userId, e.getMessage()));
+    }
+
+    @Override
+    public Mono<Feed> updateFeedInGroup(User user, String groupKey, String oldFullFeedKey, UpdateFeedRequest request) {
+        return Mono.fromCallable(() -> {
+
+            Group group = user.getGroups().stream()
+                    .filter(g -> g.getKey().equals(groupKey))
+                    .findFirst()
+                    .orElseThrow(() -> new RuntimeException("Group not found: " + groupKey));
+
+            Feed feed = group.getFeeds().stream()
+                    .filter(f -> f.getKey().equals(oldFullFeedKey))
+                    .findFirst()
+                    .orElseThrow(() -> new RuntimeException("Feed not found: " + oldFullFeedKey));
+
+            String newFullFeedKey = groupKey + "." + request.getKey();
+            feed.setName(request.getName());
+            feed.setDescription(request.getDescription());
+            feed.setKey(newFullFeedKey);
+            feed.setFloor(request.getFloor());
+            feed.setCeiling(request.getCeiling());
+
+            return feed;
+        });
     }
 
 }
