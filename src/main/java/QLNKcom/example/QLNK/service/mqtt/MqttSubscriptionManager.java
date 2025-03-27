@@ -9,6 +9,7 @@ import org.springframework.integration.mqtt.inbound.MqttPahoMessageDrivenChannel
 import org.springframework.integration.mqtt.outbound.MqttPahoMessageHandler;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -92,7 +93,7 @@ public class MqttSubscriptionManager {
                 adapter.stop();
                 log.info("❌ Unsubscribed user {} from MQTT", user.getUsername());
             }
-        });
+        }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
     /**

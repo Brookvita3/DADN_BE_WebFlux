@@ -18,6 +18,7 @@ public class MqttClientFactory {
         mqttConnectOptions.setServerURIs(new String[]{brokerUrl});
         mqttConnectOptions.setUserName(username);
         mqttConnectOptions.setPassword(apiKey.toCharArray());
+        mqttConnectOptions.setConnectionTimeout(3);
         mqttConnectOptions.setKeepAliveInterval(60);
 
         factory.setConnectionOptions(mqttConnectOptions);
