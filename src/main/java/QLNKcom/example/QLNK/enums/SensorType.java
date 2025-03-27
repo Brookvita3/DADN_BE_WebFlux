@@ -10,14 +10,15 @@ public enum SensorType {
     HUMIDITY("hum"),
     LIGHT("light");
 
-    private final String feedKey;
+    private final String type;
 
-    SensorType(String feedKey) {
-        this.feedKey = feedKey;
+    SensorType(String type) {
+        this.type = type;
     }
 
-    public static boolean isSensor(String feedKey) {
+    public static boolean isSensor(String fullFeedKey) {
+        String sensorType = fullFeedKey.split("\\.")[1];
         return Arrays.stream(SensorType.values())
-                .anyMatch(sensor -> sensor.feedKey.equals(feedKey));
+                .anyMatch(sensor -> sensor.type.equals(sensorType));
     }
 }

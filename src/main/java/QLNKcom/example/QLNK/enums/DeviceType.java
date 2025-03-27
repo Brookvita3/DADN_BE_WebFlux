@@ -9,14 +9,15 @@ public enum DeviceType {
     FAN("fan"),
     PUMP("pump");
 
-    private final String feedKey;
+    private final String type;
 
-    DeviceType(String feedKey) {
-        this.feedKey = feedKey;
+    DeviceType(String type) {
+        this.type = type;
     }
 
-    public static boolean isDevice(String feedKey) {
+    public static boolean isDevice(String fullFeedKey) {
+        String deviceType = fullFeedKey.split("\\.")[1];
         return Arrays.stream(DeviceType.values())
-                .anyMatch(device -> device.feedKey.equals(feedKey));
+                .anyMatch(device -> device.type.equals(deviceType));
     }
 }

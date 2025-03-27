@@ -16,7 +16,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.integration.channel.DirectChannel;
 import org.springframework.integration.mqtt.core.MqttPahoClientFactory;
 import org.springframework.integration.mqtt.inbound.MqttPahoMessageDrivenChannelAdapter;
@@ -32,8 +31,6 @@ import java.time.Instant;
 @Slf4j
 @RequiredArgsConstructor
 public class MqttMessageHandler {
-    @Value("${mqtt.broker.url}")
-    private String brokerUrl;
 
     private final WebSocketSessionManager webSocketSessionManager;
     private final DeviceDataRepository deviceDataRepository;
@@ -88,13 +85,14 @@ public class MqttMessageHandler {
         }
     }
 
-    private Mono<Void> saveData(User user, String groupKey, String feedKey, String value, String payload) {
-        if (DeviceType.isDevice(feedKey)) {
-            return saveDeviceData(user, groupKey, feedKey, value, payload);
-        } else if (SensorType.isSensor(feedKey)) {
-            return saveSensorData(user, groupKey, feedKey, value, payload);
+    private Mono<Void> saveData(User user, String groupKey, String fullFeedKey, String value, String payload) {
+        log.info("fullFeedKey in save data : {}", fullFeedKey);
+        if (DeviceType.isDevice(fullFeedKey)) {
+            return saveDeviceData(user, groupKey, fullFeedKey, value, payload);
+        } else if (SensorType.isSensor(fullFeedKey)) {
+            return saveSensorData(user, groupKey, fullFeedKey, value, payload);
         } else {
-            log.warn("⚠️ Unrecognized feedKey: {}", feedKey);
+            log.warn("⚠️ Unrecognized feedKey: {}", fullFeedKey);
             return Mono.empty();
         }
     }
@@ -132,10 +130,12 @@ public class MqttMessageHandler {
                         log.warn("⚠️ Invalid value format in payload: {}", valueStr);
                         return Mono.empty();
                     }
-
-                    return userProvider.findFeedByKey(user.getId(), fullFeedKey)
+                    Mono<Void> alertMono = userProvider.findFeedByKey(user.getId(), fullFeedKey)
+                            .filter(feed -> SensorType.isSensor(fullFeedKey)) // Only proceed if sensor
                             .flatMap(feed -> checkAndAlert(user, feed, value))
-                            .then(saveData(user, groupKey, feedKey, valueStr, payload));
+                            .switchIfEmpty(Mono.empty())
+                            .then();
+                    return alertMono.then(saveData(user, groupKey, fullFeedKey, valueStr, payload));
                 });
     }
 
@@ -146,12 +146,12 @@ public class MqttMessageHandler {
 
         if (ceiling != null && value > ceiling) {
             String subject = "Alert: " + feedName + " Exceeded Upper Threshold";
-            String text = String.format("The %s value (%.1f) has exceeded the upper threshold of %.1f.", feedName, value, ceiling);
+            String text = String.format("The %s value (%.1f) has exceeded the upper threshold of %.1f.", feed.getKey(), value, ceiling);
             return emailService.sendEmail(user.getEmail(), subject, text)
                     .doOnSuccess(v -> log.info("Sent email alert for {} exceeding ceiling: {} > {}", feedName, value, ceiling));
         } else if (floor != null && value < floor) {
             String subject = "Alert: " + feedName + " Below Lower Threshold";
-            String text = String.format("The %s value (%.1f) has fallen below the lower threshold of %.1f.", feedName, value, floor);
+            String text = String.format("The %s value (%.1f) has fallen below the lower threshold of %.1f.", feed.getKey(), value, floor);
             return emailService.sendEmail(user.getEmail(), subject, text)
                     .doOnSuccess(v -> log.info("Sent email alert for {} below floor: {} < {}", feedName, value, floor));
         }
@@ -172,6 +172,7 @@ public class MqttMessageHandler {
             }
 
             log.info("🔔 MQTT Received from topic {}: {}", topic, payload);
+            assert topic != null;
             processMessage(user, topic, payload).subscribe(
                     v -> {},
                     e -> log.error("Error processing MQTT message from topic {}: {}", topic, e.getMessage())
