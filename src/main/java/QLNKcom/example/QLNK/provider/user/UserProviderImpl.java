@@ -11,8 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple2;
-import reactor.util.function.Tuples;
 
 import java.util.regex.Pattern;
 
@@ -38,16 +36,6 @@ public class UserProviderImpl implements UserProvider {
     }
 
     @Override
-    public Mono<Tuple2<User, Group>> findUserAndGroup(String userId, String groupKey) {
-        return findById(userId)
-                .flatMap(user -> Mono.justOrEmpty(user.getGroups().stream()
-                                .filter(g -> g.getKey().equals(groupKey))
-                                .findFirst())
-                        .map(group -> Tuples.of(user, group))
-                        .switchIfEmpty(Mono.error(new DataNotFoundException("Group not found: " + groupKey, HttpStatus.NOT_FOUND))));
-    }
-
-    @Override
     public Mono<User> saveUser(User user) {
         System.out.println("🚀 Saving user: " + user.getEmail());
         return userRepository.save(user);
@@ -63,73 +51,6 @@ public class UserProviderImpl implements UserProvider {
         return userRepository.deleteGroup(userId, groupKey);
     }
 
-
-    @Override
-    public Mono<Void> updateGroupKey(String userId, String oldGroupKey, String newGroupKey) {
-        return findUserAndGroup(userId, oldGroupKey)
-                .flatMap(tuple -> {
-                    User user = tuple.getT1();
-                    Group group = tuple.getT2();
-
-                    if (oldGroupKey.equals(newGroupKey)) {
-                        return Mono.empty();
-                    }
-
-                    group.setKey(newGroupKey);
-                    group.getFeeds().forEach(feed -> {
-                        String oldFeedKey = feed.getKey();
-                        String newFeedKey = oldFeedKey.replaceFirst(
-                                Pattern.quote(oldGroupKey + "."),
-                                newGroupKey + "."
-                        );
-                        feed.setKey(newFeedKey);
-                    });
-
-                    return userRepository.save(user).then();
-                });
-    }
-
-
-    @Override
-    public Mono<Void> updateGroupName(String userId, String groupKey, String newName) {
-        return findUserAndGroup(userId, groupKey)
-                .flatMap(tuple -> {
-                    User user = tuple.getT1();
-                    Group group = tuple.getT2();
-
-                    if (newName == null || newName.equals(group.getName())) {
-                        return Mono.empty();
-                    }
-
-                    group.setName(newName);
-
-                    return userRepository.save(user)
-                            .doOnSuccess(v -> log.info("Saved user with updated group name: {} -> {}", group.getName(), newName))
-                            .then();
-                })
-                .doOnError(e -> log.error("Error updating group name: {}", e.getMessage()));
-    }
-
-    @Override
-    public Mono<Void> updateGroupDescription(String userId, String groupKey, String newDescription) {
-        return findUserAndGroup(userId, groupKey)
-                .flatMap(tuple -> {
-                    User user = tuple.getT1();
-                    Group group = tuple.getT2();
-
-                    if (newDescription == null || newDescription.equals(group.getDescription())) {
-                        return Mono.empty();
-                    }
-
-                    group.setDescription(newDescription);
-
-                    return userRepository.save(user)
-                            .doOnSuccess(v -> log.info("Saved user with updated group description: {} -> {}", group.getDescription(), newDescription))
-                            .then();
-                })
-                .doOnError(e -> log.error("Error updating group description: {}", e.getMessage()));
-    }
-
     @Override
     public Mono<Feed> findFeedByKey(String userId, String fullFeedKey) {
         return findById(userId)
@@ -143,28 +64,91 @@ public class UserProviderImpl implements UserProvider {
     }
 
     @Override
-    public Mono<Feed> updateFeedInGroup(User user, String groupKey, String oldFullFeedKey, UpdateFeedRequest request) {
-        return Mono.fromCallable(() -> {
-
-            Group group = user.getGroups().stream()
-                    .filter(g -> g.getKey().equals(groupKey))
-                    .findFirst()
-                    .orElseThrow(() -> new RuntimeException("Group not found: " + groupKey));
-
-            Feed feed = group.getFeeds().stream()
-                    .filter(f -> f.getKey().equals(oldFullFeedKey))
-                    .findFirst()
-                    .orElseThrow(() -> new RuntimeException("Feed not found: " + oldFullFeedKey));
-
-            String newFullFeedKey = groupKey + "." + request.getKey();
-            feed.setName(request.getName());
-            feed.setDescription(request.getDescription());
-            feed.setKey(newFullFeedKey);
-            feed.setFloor(request.getFloor());
-            feed.setCeiling(request.getCeiling());
-
-            return feed;
-        });
+    public Mono<Group> findGroupByUserId(String userId, String groupKey) {
+        return findById(userId)
+                .flatMap(user -> Mono.justOrEmpty(user.getGroups().stream()
+                                .filter(g -> g.getKey().equals(groupKey))
+                                .findFirst())
+                        .switchIfEmpty(Mono.error(new DataNotFoundException("Group not found: " + groupKey, HttpStatus.NOT_FOUND))));
     }
 
+    @Override
+    public Mono<Feed> updateFeedInGroup(User user, String groupKey, String oldFullFeedKey, UpdateFeedRequest request) {
+        return Mono.justOrEmpty(user.getGroups().stream()
+                        .filter(g -> g.getKey().equals(groupKey))
+                        .findFirst())
+                .switchIfEmpty(Mono.error(new DataNotFoundException("Group not found: " + groupKey, HttpStatus.NOT_FOUND)))
+                .flatMap(group -> Mono.justOrEmpty(group.getFeeds().stream()
+                                .filter(f -> f.getKey().equals(oldFullFeedKey))
+                                .findFirst())
+                        .switchIfEmpty(Mono.error(new DataNotFoundException("Feed not found: " + oldFullFeedKey, HttpStatus.NOT_FOUND)))
+                        .map(feed -> {
+                            String newFullFeedKey = groupKey + "." + request.getKey();
+                            feed.setName(request.getName());
+                            feed.setDescription(request.getDescription());
+                            feed.setKey(newFullFeedKey);
+                            feed.setFloor(request.getFloor());
+                            feed.setCeiling(request.getCeiling());
+                            return feed;
+                        }));
+    }
+
+
+    @Override
+    public Mono<User> updateGroupName(User user, String groupKey, String newName) {
+        return Mono.justOrEmpty(user.getGroups().stream()
+                        .filter(g -> g.getKey().equals(groupKey))
+                        .findFirst())
+                .switchIfEmpty(Mono.error(new DataNotFoundException("Group not found: " + groupKey, HttpStatus.NOT_FOUND)))
+                .flatMap(group -> {
+                    if (newName == null || newName.equals(group.getName())) {
+                        return Mono.empty();
+                    }
+                    group.setName(newName);
+                    return userRepository.save(user)
+                            .doOnSuccess(savedUser -> log.info("Saved user with updated group name: {} -> {}", group.getName(), newName));
+                })
+                .doOnError(e -> log.error("Error updating group name: {}", e.getMessage()));
+    }
+
+    @Override
+    public Mono<User> updateGroupDescription(User user, String groupKey, String newDescription) {
+        return Mono.justOrEmpty(user.getGroups().stream()
+                        .filter(g -> g.getKey().equals(groupKey))
+                        .findFirst())
+                .switchIfEmpty(Mono.error(new DataNotFoundException("Group not found: " + groupKey, HttpStatus.NOT_FOUND)))
+                .flatMap(group -> {
+                    if (newDescription == null || newDescription.equals(group.getDescription())) {
+                        return Mono.empty();
+                    }
+                    group.setDescription(newDescription);
+                    return userRepository.save(user)
+                            .doOnSuccess(savedUser -> log.info("Saved user with updated group description: {} -> {}", group.getDescription(), newDescription));
+                })
+                .doOnError(e -> log.error("Error updating group description: {}", e.getMessage()));
+    }
+
+    @Override
+    public Mono<User> updateGroupKey(User user, String oldGroupKey, String newGroupKey) {
+        return Mono.justOrEmpty(user.getGroups().stream()
+                        .filter(g -> g.getKey().equals(oldGroupKey))
+                        .findFirst())
+                .switchIfEmpty(Mono.error(new DataNotFoundException("Group not found: " + oldGroupKey, HttpStatus.NOT_FOUND)))
+                .flatMap(group -> {
+                    if (oldGroupKey.equals(newGroupKey)) {
+                        return Mono.empty();
+                    }
+                    group.setKey(newGroupKey);
+                    group.getFeeds().forEach(feed -> {
+                        String oldFeedKey = feed.getKey();
+                        String newFeedKey = oldFeedKey.replaceFirst(
+                                Pattern.quote(oldGroupKey + "."),
+                                newGroupKey + "."
+                        );
+                        feed.setKey(newFeedKey);
+                    });
+                    return userRepository.save(user)
+                            .doOnSuccess(savedUser -> log.info("User after update successfully: {}", savedUser));
+                });
+    }
 }

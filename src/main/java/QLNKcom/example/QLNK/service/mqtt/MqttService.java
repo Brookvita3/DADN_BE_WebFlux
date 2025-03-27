@@ -76,5 +76,10 @@ public class MqttService {
                 .then();
     }
 
-
+    public Mono<Void> updateFeedSubscription(User user, String oldFullFeedKey, String newFullFeedKey) {
+        String oldTopic = user.getUsername() + "/feeds/" + oldFullFeedKey + "/json";
+        String newTopic = user.getUsername() + "/feeds/" + newFullFeedKey + "/json";
+        return mqttSubscriptionManager.unsubscribeFeed(user, oldTopic)
+                .then(mqttSubscriptionManager.updateSubscription(user, newTopic));
+    }
 }
