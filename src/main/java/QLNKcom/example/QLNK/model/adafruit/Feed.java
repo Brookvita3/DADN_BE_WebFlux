@@ -14,7 +14,4 @@ public class Feed {
 
     private String description;
 
-    private Double ceiling;
-
-    private Double floor;
 }

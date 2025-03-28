@@ -5,6 +5,8 @@ import QLNKcom.example.QLNK.exception.DataNotFoundException;
 import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.model.adafruit.Feed;
 import QLNKcom.example.QLNK.model.adafruit.Group;
+import QLNKcom.example.QLNK.model.data.FeedRule;
+import QLNKcom.example.QLNK.repository.FeedRuleRepository;
 import QLNKcom.example.QLNK.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,24 +22,32 @@ import java.util.regex.Pattern;
 public class UserProviderImpl implements UserProvider {
 
     private final UserRepository userRepository;
+    private final FeedRuleRepository feedRuleRepository;
 
     @Override
     public Mono<User> findById(String userId) {
-        System.out.println("🚀 Finding user: " + userId);
+        log.info("🚀 Finding user with userId: {}", userId);
         return userRepository.findById(userId)
                 .switchIfEmpty(Mono.error(new DataNotFoundException("User not found", HttpStatus.NOT_FOUND)));
     }
 
     @Override
     public Mono<User> findByEmail(String email) {
-        System.out.println("🚀 Finding user: " + email);
+        log.info("🚀 Finding user with email: {}", email);
         return userRepository.findByEmail(email)
                 .switchIfEmpty(Mono.error(new DataNotFoundException("User not found", HttpStatus.NOT_FOUND)));
     }
 
     @Override
+    public Mono<FeedRule> findByEmailAndFullFeedKey(String email, String inputFullFeedKey) {
+        log.info("🚀 Finding feed rule {} of email {}", inputFullFeedKey, email);
+        return feedRuleRepository.findByEmailAndInputFeed(email, inputFullFeedKey)
+                .switchIfEmpty(Mono.error(new DataNotFoundException("Feed rule not found for email: " + email + " and inputFullFeedKey: " + inputFullFeedKey, HttpStatus.NOT_FOUND)));
+    }
+
+    @Override
     public Mono<User> saveUser(User user) {
-        System.out.println("🚀 Saving user: " + user.getEmail());
+        log.info("🚀 Saving user with email {} ", user.getEmail());
         return userRepository.save(user);
     }
 
@@ -87,8 +97,6 @@ public class UserProviderImpl implements UserProvider {
                             feed.setName(request.getName());
                             feed.setDescription(request.getDescription());
                             feed.setKey(newFullFeedKey);
-                            feed.setFloor(request.getFloor());
-                            feed.setCeiling(request.getCeiling());
                             return feed;
                         }));
     }

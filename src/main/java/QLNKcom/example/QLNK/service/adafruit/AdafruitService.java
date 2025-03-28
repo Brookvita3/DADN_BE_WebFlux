@@ -93,11 +93,6 @@ public class AdafruitService {
                 .bodyValue(request)
                 .retrieve()
                 .bodyToMono(Feed.class)
-                .map(feed -> {
-                    feed.setCeiling(request.getCeiling());
-                    feed.setFloor(request.getFloor());
-                    return feed;
-                })
                 .doOnSuccess(feed -> log.info("✅ Created feed {} on Adafruit for group {}", feed.getKey(), groupKey));
     }
 
@@ -168,8 +163,6 @@ public class AdafruitService {
                 .bodyToMono(Feed.class)
                 .map(feed -> {
                     feed.setKey(feedKey);
-                    feed.setCeiling(request.getCeiling());
-                    feed.setFloor(request.getFloor());
                     return feed;
                 })
                 .doOnSuccess(feed -> log.info("✅ Update feed {} on Adafruit for group {}", feed.getKey(), groupKey));

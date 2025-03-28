@@ -14,11 +14,4 @@ public class CreateFeedRequest {
     @JsonProperty("description")
     private String description;
 
-    @JsonProperty("floor")
-    @NotBlank
-    private Double floor;
-
-    @JsonProperty("ceiling")
-    @NotBlank
-    private Double ceiling;
 }

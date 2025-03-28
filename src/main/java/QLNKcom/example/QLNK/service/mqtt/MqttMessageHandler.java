@@ -5,6 +5,7 @@ import QLNKcom.example.QLNK.enums.SensorType;
 import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.model.adafruit.Feed;
 import QLNKcom.example.QLNK.model.data.DeviceData;
+import QLNKcom.example.QLNK.model.data.FeedRule;
 import QLNKcom.example.QLNK.model.data.SensorData;
 import QLNKcom.example.QLNK.provider.user.UserProvider;
 import QLNKcom.example.QLNK.repository.DeviceDataRepository;
@@ -130,30 +131,35 @@ public class MqttMessageHandler {
                         log.warn("⚠️ Invalid value format in payload: {}", valueStr);
                         return Mono.empty();
                     }
-                    Mono<Void> alertMono = userProvider.findFeedByKey(user.getId(), fullFeedKey)
-                            .filter(feed -> SensorType.isSensor(fullFeedKey)) // Only proceed if sensor
-                            .flatMap(feed -> checkAndAlert(user, feed, value))
+
+                    Mono<Void> alertMono = userProvider.findByEmailAndFullFeedKey(user.getEmail(), fullFeedKey)
+                            .flatMap(feedRule -> checkAndAlert(user, feedRule, value))
                             .switchIfEmpty(Mono.empty())
                             .then();
+
                     return alertMono.then(saveData(user, groupKey, fullFeedKey, valueStr, payload));
                 });
     }
 
-    private Mono<Void> checkAndAlert(User user, Feed feed, double value) {
+    private Mono<Void> checkAndAlert(User user, FeedRule feed, double value) {
         Double ceiling = feed.getCeiling();
         Double floor = feed.getFloor();
-        String feedName = feed.getName();
+        String feedName = feed.getInputFeed(); // Thay getName() bằng getFullFeedKey()
 
         if (ceiling != null && value > ceiling) {
             String subject = "Alert: " + feedName + " Exceeded Upper Threshold";
-            String text = String.format("The %s value (%.1f) has exceeded the upper threshold of %.1f.", feed.getKey(), value, ceiling);
+            String text = String.format("The %s value (%.1f) has exceeded the upper threshold of %.1f.",
+                    feed.getInputFeed(), value, ceiling); // Thay getKey() bằng getFullFeedKey()
             return emailService.sendEmail(user.getEmail(), subject, text)
-                    .doOnSuccess(v -> log.info("Sent email alert for {} exceeding ceiling: {} > {}", feedName, value, ceiling));
+                    .doOnSuccess(v -> log.info("Sent email alert for {} exceeding ceiling: {} > {}",
+                            feedName, value, ceiling));
         } else if (floor != null && value < floor) {
             String subject = "Alert: " + feedName + " Below Lower Threshold";
-            String text = String.format("The %s value (%.1f) has fallen below the lower threshold of %.1f.", feed.getKey(), value, floor);
+            String text = String.format("The %s value (%.1f) has fallen below the lower threshold of %.1f.",
+                    feed.getInputFeed(), value, floor); // Thay getKey() bằng getFullFeedKey()
             return emailService.sendEmail(user.getEmail(), subject, text)
-                    .doOnSuccess(v -> log.info("Sent email alert for {} below floor: {} < {}", feedName, value, floor));
+                    .doOnSuccess(v -> log.info("Sent email alert for {} below floor: {} < {}",
+                            feedName, value, floor));
         }
         return Mono.empty();
     }

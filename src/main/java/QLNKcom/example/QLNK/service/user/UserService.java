@@ -6,7 +6,9 @@ import QLNKcom.example.QLNK.exception.DataNotFoundException;
 import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.model.adafruit.Feed;
 import QLNKcom.example.QLNK.model.adafruit.Group;
+import QLNKcom.example.QLNK.model.data.FeedRule;
 import QLNKcom.example.QLNK.provider.user.UserProvider;
+import QLNKcom.example.QLNK.repository.FeedRuleRepository;
 import QLNKcom.example.QLNK.service.adafruit.AdafruitService;
 import QLNKcom.example.QLNK.service.mqtt.MqttService;
 import QLNKcom.example.QLNK.service.mqtt.MqttSubscriptionManager;
@@ -29,6 +31,7 @@ public class UserService {
     private final AdafruitService adafruitService;
     private final MqttService mqttService;
     private final MqttSubscriptionManager mqttSubscriptionManager;
+    private final FeedRuleRepository feedRuleRepository;
 
     private Mono<Boolean> isGroupExists(User user, String groupName) {
         return Mono.just(user.getGroups().stream()
@@ -80,6 +83,23 @@ public class UserService {
                 .build();
 
         return userProvider.saveUser(newUser);
+    }
+
+    public Mono<FeedRule> createFeedRule(String email, CreateFeedRuleRequest request) {
+
+        FeedRule newFeedRule = FeedRule.builder()
+                .groupKey(request.getInputFeed().split("\\.")[0])
+                .email(email)
+                .inputFeed(request.getInputFeed())
+                .floor(request.getFloor())
+                .ceiling(request.getCeiling())
+                .aboveValue(request.getAboveValue())
+                .belowValue(request.getBelowValue())
+                .outputFeedAbove(request.getOutputFeedAbove())
+                .outputFeedBelow(request.getOutputFeedBelow())
+                .build();
+
+        return feedRuleRepository.save(newFeedRule);
     }
 
     public Mono<Group> createGroupByEmail(CreateGroupRequest request, String email) {

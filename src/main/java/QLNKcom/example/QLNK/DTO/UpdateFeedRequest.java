@@ -21,11 +21,4 @@ public class UpdateFeedRequest {
     @NotNull(message = "Key is required")
     private String key;
 
-    @JsonProperty("floor")
-    @NotNull(message = "Floor value is required")
-    private Double floor;
-
-    @JsonProperty("ceiling")
-    @NotNull(message = "Ceiling vale is required")
-    private Double ceiling;
 }

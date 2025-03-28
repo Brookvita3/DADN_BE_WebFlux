@@ -4,6 +4,7 @@ import QLNKcom.example.QLNK.DTO.UpdateFeedRequest;
 import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.model.adafruit.Feed;
 import QLNKcom.example.QLNK.model.adafruit.Group;
+import QLNKcom.example.QLNK.model.data.FeedRule;
 import reactor.core.publisher.Mono;
 
 public interface UserProvider {
@@ -22,5 +23,5 @@ public interface UserProvider {
     Mono<Void> deleteFeedFromGroup(String userId, String groupKey, String feedKey);
     Mono<Void> deleteGroup(String userId, String groupKey);
 
-
+    Mono<FeedRule> findByEmailAndFullFeedKey(String email, String fullFeedKey);
 }
