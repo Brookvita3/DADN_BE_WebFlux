@@ -3,6 +3,7 @@ package QLNKcom.example.QLNK.controller.user;
 import QLNKcom.example.QLNK.DTO.CreateFeedRequest;
 import QLNKcom.example.QLNK.DTO.CreateFeedRuleRequest;
 import QLNKcom.example.QLNK.DTO.CreateGroupRequest;
+import QLNKcom.example.QLNK.DTO.UpdateInfoRequest;
 import QLNKcom.example.QLNK.response.ResponseObject;
 import QLNKcom.example.QLNK.service.user.UserService;
 import jakarta.validation.Valid;
@@ -37,4 +38,33 @@ public class UserController {
                 ));
     }
 
+    @GetMapping("/info")
+    public Mono<ResponseEntity<ResponseObject>> getInfo() {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getName)
+                .flatMap(userService::getInfo)
+                .map(user -> ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Get info successfully")
+                                .data(user)
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ));
+    }
+
+    @PutMapping("/info")
+    public Mono<ResponseEntity<ResponseObject>> updateInfo(@RequestBody @Valid UpdateInfoRequest request) {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getName)
+                .flatMap(email -> userService.updateInfo(email, request))
+                .map(feedRule -> ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Create feed rule successfully")
+                                .data(feedRule)
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ));
+    }
 }

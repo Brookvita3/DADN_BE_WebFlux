@@ -214,5 +214,29 @@ public class UserService {
                 .then();
     }
 
+    public Mono<User> getInfo(String email) {
+        return userProvider.findByEmail(email);
+    }
+
+    public Mono<User> updateInfo(String email, UpdateInfoRequest request) {
+        return userProvider.findByEmail(email)
+                .switchIfEmpty(Mono.error(new RuntimeException("User not found")))
+                .flatMap(user -> {
+                    String oldEmail = user.getEmail();
+
+                    user.setEmail(request.getEmail());
+                    user.setPassword(passwordEncoder.encode(request.getPassword()));
+                    user.setApikey(request.getApikey());
+                    return userProvider.saveUser(user).flatMap(
+                            updatedUser -> {
+                                if (!oldEmail.equals(request.getEmail())) {
+                                    return userProvider.updateFeedRulesEmail(oldEmail, request.getEmail())
+                                            .thenReturn(updatedUser);
+                                }
+                                return Mono.just(updatedUser);
+                            }
+                    );
+                });
+    }
 
 }

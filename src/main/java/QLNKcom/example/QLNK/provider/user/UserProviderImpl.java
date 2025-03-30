@@ -159,4 +159,14 @@ public class UserProviderImpl implements UserProvider {
                             .doOnSuccess(savedUser -> log.info("User after update successfully: {}", savedUser));
                 });
     }
+
+    @Override
+    public Mono<Void> updateFeedRulesEmail(String oldEmail, String newEmail) {
+        return feedRuleRepository.findByEmail(oldEmail)
+                .flatMap(feedRule -> {
+                    feedRule.setEmail(newEmail);
+                    return feedRuleRepository.save(feedRule);
+                })
+                .then();
+    }
 }

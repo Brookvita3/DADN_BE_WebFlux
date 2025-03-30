@@ -24,4 +24,5 @@ public interface UserProvider {
     Mono<Void> deleteGroup(String userId, String groupKey);
 
     Mono<FeedRule> findByEmailAndFullFeedKey(String email, String fullFeedKey);
+    Mono<Void> updateFeedRulesEmail(String oldEmail, String newEmail);
 }
