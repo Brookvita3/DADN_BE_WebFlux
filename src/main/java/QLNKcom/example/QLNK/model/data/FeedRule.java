@@ -23,8 +23,8 @@ public class FeedRule {
     private Double floor;
     private String outputFeedAbove;
     private String outputFeedBelow;
-    private String aboveValue;
-    private String belowValue;
+    private Double aboveValue;
+    private Double belowValue;
     private String email;
 
     private Long lastViolationTime;

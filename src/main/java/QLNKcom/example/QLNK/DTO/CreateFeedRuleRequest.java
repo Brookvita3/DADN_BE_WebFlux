@@ -24,9 +24,11 @@ public class CreateFeedRuleRequest {
     @NotBlank(message = "Output feed for below floor must not be blank")
     private String outputFeedBelow;
 
-    @NotBlank(message = "Value for above ceiling must not be blank")
-    private String aboveValue;
+    @NotNull(message = "Value for above ceiling must not be blank")
+    @Positive(message = "AboveValue must be a positive number")
+    private Double aboveValue;
 
-    @NotBlank(message = "Value for below floor must not be blank")
-    private String belowValue;
+    @NotNull(message = "Value for below floor must not be blank")
+    @Positive(message = "BelowValue must be a positive number")
+    private Double belowValue;
 }

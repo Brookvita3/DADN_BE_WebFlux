@@ -192,7 +192,8 @@ public class MqttMessageHandler {
                         if (timeSinceViolation >= 60_000 && feed.getContinuousViolation() != null && feed.getContinuousViolation()) {
                             if (ceiling != null && currentValue > ceiling) {
                                 String topic = user.getUsername() + "/feeds/" + feed.getOutputFeedAbove();
-                                return mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedAbove(), feed.getAboveValue())
+                                String aboveValueStr = feed.getAboveValue().toString();
+                                return mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedAbove(), aboveValueStr)
                                         .doOnSuccess(v -> log.info("Sent MQTT adjustment to {}: {} (value: {} > ceiling: {})",
                                                 topic, feed.getAboveValue(), currentValue, ceiling))
                                         .then(Mono.fromRunnable(() -> {
@@ -201,7 +202,8 @@ public class MqttMessageHandler {
                                         }));
                             } else if (floor != null && currentValue < floor) {
                                 String topic = user.getUsername() + "/feeds/" + feed.getOutputFeedBelow();
-                                return mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedBelow(), feed.getBelowValue())
+                                String belowValueStr = feed.getBelowValue().toString();
+                                return mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedBelow(), belowValueStr)
                                         .doOnSuccess(v -> log.info("Sent MQTT adjustment to {}: {} (value: {} < floor: {})",
                                                 topic, feed.getBelowValue(), currentValue, floor))
                                         .then(Mono.fromRunnable(() -> {
