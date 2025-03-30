@@ -1,8 +1,7 @@
 package QLNKcom.example.QLNK.controller.feed;
 
-import QLNKcom.example.QLNK.DTO.CreateFeedRequest;
-import QLNKcom.example.QLNK.DTO.CreateFeedRuleRequest;
-import QLNKcom.example.QLNK.DTO.UpdateFeedRequest;
+import QLNKcom.example.QLNK.DTO.feed.CreateFeedRequest;
+import QLNKcom.example.QLNK.DTO.feed.UpdateFeedRequest;
 import QLNKcom.example.QLNK.response.ResponseObject;
 import QLNKcom.example.QLNK.service.user.UserService;
 import jakarta.validation.Valid;

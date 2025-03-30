@@ -1,8 +1,8 @@
 package QLNKcom.example.QLNK.controller.auth;
 
-import QLNKcom.example.QLNK.DTO.LoginRequest;
-import QLNKcom.example.QLNK.DTO.RefreshRequest;
-import QLNKcom.example.QLNK.DTO.RegisterRequest;
+import QLNKcom.example.QLNK.DTO.user.LoginRequest;
+import QLNKcom.example.QLNK.DTO.user.RefreshRequest;
+import QLNKcom.example.QLNK.DTO.user.RegisterRequest;
 import QLNKcom.example.QLNK.response.ResponseObject;
 import QLNKcom.example.QLNK.service.auth.AuthService;
 import jakarta.validation.Valid;

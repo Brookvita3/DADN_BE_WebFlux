@@ -1,8 +1,8 @@
 package QLNKcom.example.QLNK.service.auth;
 
-import QLNKcom.example.QLNK.DTO.LoginRequest;
-import QLNKcom.example.QLNK.DTO.RefreshRequest;
-import QLNKcom.example.QLNK.DTO.RegisterRequest;
+import QLNKcom.example.QLNK.DTO.user.LoginRequest;
+import QLNKcom.example.QLNK.DTO.user.RefreshRequest;
+import QLNKcom.example.QLNK.DTO.user.RegisterRequest;
 import QLNKcom.example.QLNK.config.jwt.JwtUtils;
 import QLNKcom.example.QLNK.exception.AdafruitException;
 import QLNKcom.example.QLNK.exception.CustomAuthException;

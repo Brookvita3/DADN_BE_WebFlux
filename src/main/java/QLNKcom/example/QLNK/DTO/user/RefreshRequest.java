@@ -1,6 +1,5 @@
-package QLNKcom.example.QLNK.DTO;
+package QLNKcom.example.QLNK.DTO.user;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 

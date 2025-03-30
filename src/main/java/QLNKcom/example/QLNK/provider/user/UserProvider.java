@@ -1,6 +1,6 @@
 package QLNKcom.example.QLNK.provider.user;
 
-import QLNKcom.example.QLNK.DTO.UpdateFeedRequest;
+import QLNKcom.example.QLNK.DTO.feed.UpdateFeedRequest;
 import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.model.adafruit.Feed;
 import QLNKcom.example.QLNK.model.adafruit.Group;

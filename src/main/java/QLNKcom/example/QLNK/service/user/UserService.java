@@ -1,6 +1,12 @@
 package QLNKcom.example.QLNK.service.user;
 
-import QLNKcom.example.QLNK.DTO.*;
+import QLNKcom.example.QLNK.DTO.feed.CreateFeedRequest;
+import QLNKcom.example.QLNK.DTO.feed.UpdateFeedRequest;
+import QLNKcom.example.QLNK.DTO.feed.UpdateGroupRequest;
+import QLNKcom.example.QLNK.DTO.group.CreateGroupRequest;
+import QLNKcom.example.QLNK.DTO.user.CreateFeedRuleRequest;
+import QLNKcom.example.QLNK.DTO.user.RegisterRequest;
+import QLNKcom.example.QLNK.DTO.user.UpdateInfoRequest;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.exception.DataNotFoundException;
 import QLNKcom.example.QLNK.model.User;

@@ -1,8 +1,8 @@
 package QLNKcom.example.QLNK.controller.group;
 
 
-import QLNKcom.example.QLNK.DTO.CreateGroupRequest;
-import QLNKcom.example.QLNK.DTO.UpdateGroupRequest;
+import QLNKcom.example.QLNK.DTO.group.CreateGroupRequest;
+import QLNKcom.example.QLNK.DTO.feed.UpdateGroupRequest;
 import QLNKcom.example.QLNK.response.ResponseObject;
 import QLNKcom.example.QLNK.service.user.UserService;
 import jakarta.validation.Valid;

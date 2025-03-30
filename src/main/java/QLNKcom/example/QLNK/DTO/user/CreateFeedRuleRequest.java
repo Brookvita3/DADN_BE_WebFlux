@@ -1,4 +1,4 @@
-package QLNKcom.example.QLNK.DTO;
+package QLNKcom.example.QLNK.DTO.user;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

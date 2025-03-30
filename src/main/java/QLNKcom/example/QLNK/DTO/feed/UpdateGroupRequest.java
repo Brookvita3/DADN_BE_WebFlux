@@ -1,4 +1,4 @@
-package QLNKcom.example.QLNK.DTO;
+package QLNKcom.example.QLNK.DTO.feed;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotNull;
@@ -7,7 +7,7 @@ import lombok.Data;
 
 @Data
 @AllArgsConstructor
-public class UpdateFeedRequest {
+public class UpdateGroupRequest {
 
     @JsonProperty("name")
     @NotNull(message = "Name is required")
@@ -20,5 +20,4 @@ public class UpdateFeedRequest {
     @JsonProperty("key")
     @NotNull(message = "Key is required")
     private String key;
-
 }

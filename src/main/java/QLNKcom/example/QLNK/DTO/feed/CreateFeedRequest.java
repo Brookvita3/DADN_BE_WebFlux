@@ -1,14 +1,11 @@
-package QLNKcom.example.QLNK.DTO;
+package QLNKcom.example.QLNK.DTO.feed;
 
-import QLNKcom.example.QLNK.model.adafruit.Feed;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
-import java.util.List;
-
 @Data
-public class CreateGroupRequest {
+public class CreateFeedRequest {
 
     @JsonProperty("name")
     @NotBlank
@@ -17,6 +14,4 @@ public class CreateGroupRequest {
     @JsonProperty("description")
     private String description;
 
-    @JsonProperty("feeds")
-    private List<Feed> feeds;
 }

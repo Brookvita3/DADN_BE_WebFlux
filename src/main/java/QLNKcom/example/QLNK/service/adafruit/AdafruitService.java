@@ -1,9 +1,9 @@
 package QLNKcom.example.QLNK.service.adafruit;
 
-import QLNKcom.example.QLNK.DTO.CreateFeedRequest;
-import QLNKcom.example.QLNK.DTO.CreateGroupRequest;
-import QLNKcom.example.QLNK.DTO.UpdateFeedRequest;
-import QLNKcom.example.QLNK.DTO.UpdateGroupRequest;
+import QLNKcom.example.QLNK.DTO.feed.CreateFeedRequest;
+import QLNKcom.example.QLNK.DTO.group.CreateGroupRequest;
+import QLNKcom.example.QLNK.DTO.feed.UpdateFeedRequest;
+import QLNKcom.example.QLNK.DTO.feed.UpdateGroupRequest;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.model.adafruit.Feed;
 import QLNKcom.example.QLNK.model.adafruit.Group;
