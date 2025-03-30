@@ -1,6 +1,7 @@
 package QLNKcom.example.QLNK.controller.user;
 
 import QLNKcom.example.QLNK.DTO.user.CreateFeedRuleRequest;
+import QLNKcom.example.QLNK.DTO.user.UpdateFeedRuleRequest;
 import QLNKcom.example.QLNK.DTO.user.UpdateInfoRequest;
 import QLNKcom.example.QLNK.response.ResponseObject;
 import QLNKcom.example.QLNK.service.user.UserService;
@@ -59,7 +60,24 @@ public class UserController {
                 .flatMap(email -> userService.updateInfo(email, request))
                 .map(feedRule -> ResponseEntity.ok(
                         ResponseObject.builder()
-                                .message("Create feed rule successfully")
+                                .message("Update info successfully")
+                                .data(feedRule)
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ));
+    }
+
+    @PutMapping("/rule")
+    public Mono<ResponseEntity<ResponseObject>> updateFeedRule(
+            @RequestBody @Valid UpdateFeedRuleRequest request,
+            @RequestParam("feed") String fullFeedKey) {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getName)
+                .flatMap(email -> userService.updateFeedRule(email, fullFeedKey, request))
+                .map(feedRule -> ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Update feed rule rule successfully")
                                 .data(feedRule)
                                 .status(HttpStatus.OK.value())
                                 .build()

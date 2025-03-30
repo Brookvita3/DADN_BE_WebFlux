@@ -6,6 +6,7 @@ import QLNKcom.example.QLNK.DTO.feed.UpdateGroupRequest;
 import QLNKcom.example.QLNK.DTO.group.CreateGroupRequest;
 import QLNKcom.example.QLNK.DTO.user.CreateFeedRuleRequest;
 import QLNKcom.example.QLNK.DTO.user.RegisterRequest;
+import QLNKcom.example.QLNK.DTO.user.UpdateFeedRuleRequest;
 import QLNKcom.example.QLNK.DTO.user.UpdateInfoRequest;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.exception.DataNotFoundException;
@@ -242,6 +243,22 @@ public class UserService {
                                 return Mono.just(updatedUser);
                             }
                     );
+                });
+    }
+
+    public Mono<FeedRule> updateFeedRule(String email, String fullFeedKey, UpdateFeedRuleRequest request) {
+        return userProvider.findByEmailAndFullFeedKey(email, fullFeedKey)
+                .switchIfEmpty(Mono.error(new RuntimeException("Feed rule not found")))
+                .flatMap(feedRule -> {
+                    feedRule.setInputFeed(request.getInputFeed());
+                    feedRule.setCeiling(request.getCeiling());
+                    feedRule.setFloor(request.getFloor());
+                    feedRule.setOutputFeedAbove(request.getOutputFeedAbove());
+                    feedRule.setOutputFeedBelow(request.getOutputFeedBelow());
+                    feedRule.setAboveValue(request.getAboveValue());
+                    feedRule.setBelowValue(request.getBelowValue());
+
+                    return feedRuleRepository.save(feedRule);
                 });
     }
 
