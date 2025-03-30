@@ -1,12 +1,10 @@
 package QLNKcom.example.QLNK.service.mqtt;
 
 import QLNKcom.example.QLNK.model.User;
-import QLNKcom.example.QLNK.model.adafruit.Feed;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.integration.mqtt.core.MqttPahoClientFactory;
 import org.springframework.integration.mqtt.inbound.MqttPahoMessageDrivenChannelAdapter;
-import org.springframework.integration.mqtt.outbound.MqttPahoMessageHandler;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -22,7 +20,6 @@ public class MqttSubscriptionManager {
     private final MqttAdapterFactory mqttAdapterFactory;
     private final MqttMessageHandler mqttMessageHandler;
     private final Map<String, MqttPahoMessageDrivenChannelAdapter> activeSubscribers = new ConcurrentHashMap<>();
-    private final Map<String, MqttPahoMessageHandler> activeHandlers = new ConcurrentHashMap<>();
 
     public Mono<Void> subscribeFeed(User user, List<String> feeds) {
         if (feeds.isEmpty()) {
@@ -57,17 +54,14 @@ public class MqttSubscriptionManager {
                 });
     }
 
+
     private Mono<MqttPahoMessageDrivenChannelAdapter> createNewAdapter(User user, List<String> feeds, String clientId) {
         return Mono.fromCallable(() -> {
             MqttPahoClientFactory client = mqttClientFactory.createMqttClient(user.getUsername(), user.getApikey());
             MqttPahoMessageDrivenChannelAdapter adapter = mqttAdapterFactory.createMqttAdapter(user, client, feeds);
             adapter.start();
-
-            MqttPahoMessageHandler messageHandler = mqttMessageHandler.createMessageHandler(user, client);
             mqttMessageHandler.attachHandler(adapter, user);
-
             activeSubscribers.put(clientId, adapter);
-            activeHandlers.put(clientId, messageHandler);
             return adapter;
         });
     }
@@ -88,7 +82,6 @@ public class MqttSubscriptionManager {
         return Mono.fromRunnable(() -> {
             String clientId = "mqtt-" + user.getId();
             MqttPahoMessageDrivenChannelAdapter adapter = activeSubscribers.remove(clientId);
-            activeHandlers.remove(clientId);
             if (adapter != null) {
                 adapter.stop();
                 log.info("❌ Unsubscribed user {} from MQTT", user.getUsername());
@@ -97,7 +90,7 @@ public class MqttSubscriptionManager {
     }
 
     /**
-     * @param  topic  the topic must have format username/feeds/feedKey/json
+     * @param topic the topic must have format username/feeds/feedKey/json
      */
     public Mono<Void> unsubscribeFeed(User user, String topic) {
         String clientId = "mqtt-" + user.getId();
@@ -115,31 +108,12 @@ public class MqttSubscriptionManager {
                         adapter.stop();
                         activeSubscribers.remove(clientId);
                         log.info("🗑️ Removed adapter for user {} as no topics remain", user.getUsername());
-                        activeHandlers.remove(clientId);
-                        log.info("🗑️ Removed message handler for user {}", user.getUsername());
                     }
+                } else {
+                    log.info("❌ Topic {} is not subscribed by adapter of user {}", topic, user.getUsername());
                 }
-                else log.info("❌ Topic {} is not subscribed by adapter of user {}", topic, user.getUsername());
             }
         });
-    }
-
-    public Mono<MqttPahoMessageDrivenChannelAdapter> getMqttAdapter(String userId) {
-        MqttPahoMessageDrivenChannelAdapter adapter = activeSubscribers.get("mqtt-" + userId);
-        if (adapter == null) {
-            log.warn("❌ No active MQTT adapter found for user {}", userId);
-            return Mono.empty();
-        }
-        return Mono.just(adapter);
-    }
-
-    public Mono<MqttPahoMessageHandler> getMqttPahoMessageHandler(String userId) {
-        MqttPahoMessageHandler messageHandler = activeHandlers.get("mqtt-" + userId);
-        if (messageHandler == null) {
-            log.warn("❌ No active MQTT client found for user {}", userId);
-            return Mono.empty();
-        }
-        return Mono.just(messageHandler);
     }
 
 }

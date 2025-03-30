@@ -26,4 +26,7 @@ public class FeedRule {
     private String aboveValue;
     private String belowValue;
     private String email;
+
+    private Long lastViolationTime;
+    private Boolean continuousViolation;
 }

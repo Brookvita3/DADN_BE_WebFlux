@@ -2,13 +2,14 @@ package QLNKcom.example.QLNK.service.mqtt;
 
 import QLNKcom.example.QLNK.enums.DeviceType;
 import QLNKcom.example.QLNK.enums.SensorType;
+import QLNKcom.example.QLNK.exception.DataNotFoundException;
 import QLNKcom.example.QLNK.model.User;
-import QLNKcom.example.QLNK.model.adafruit.Feed;
 import QLNKcom.example.QLNK.model.data.DeviceData;
 import QLNKcom.example.QLNK.model.data.FeedRule;
 import QLNKcom.example.QLNK.model.data.SensorData;
 import QLNKcom.example.QLNK.provider.user.UserProvider;
 import QLNKcom.example.QLNK.repository.DeviceDataRepository;
+import QLNKcom.example.QLNK.repository.FeedRuleRepository;
 import QLNKcom.example.QLNK.repository.SensorDataRepository;
 import QLNKcom.example.QLNK.service.email.EmailService;
 import QLNKcom.example.QLNK.service.websocket.WebSocketSessionManager;
@@ -36,8 +37,11 @@ public class MqttMessageHandler {
     private final WebSocketSessionManager webSocketSessionManager;
     private final DeviceDataRepository deviceDataRepository;
     private final SensorDataRepository sensorDataRepository;
+    private final FeedRuleRepository feedRuleRepository;
     private final EmailService emailService;
     private final UserProvider userProvider;
+//    private final MqttService mqttService;
+    private final MqttCommandService mqttCommandService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private JsonNode parsePayload(String payload) {
@@ -98,7 +102,7 @@ public class MqttMessageHandler {
         }
     }
 
-    private Mono<Void> processMessage(User user, String topic, String payload) {
+    public Mono<Void> processMessage(User user, String topic, String payload) {
         String[] parts = topic.split("/");
         if (parts.length < 4) {
             log.warn("⚠️ Invalid topic format: {}", topic);
@@ -134,34 +138,85 @@ public class MqttMessageHandler {
 
                     Mono<Void> alertMono = userProvider.findByEmailAndFullFeedKey(user.getEmail(), fullFeedKey)
                             .flatMap(feedRule -> checkAndAlert(user, feedRule, value))
-                            .switchIfEmpty(Mono.empty())
+                            .onErrorResume(DataNotFoundException.class, e -> Mono.empty())
                             .then();
 
                     return alertMono.then(saveData(user, groupKey, fullFeedKey, valueStr, payload));
                 });
     }
 
+
     private Mono<Void> checkAndAlert(User user, FeedRule feed, double value) {
         Double ceiling = feed.getCeiling();
         Double floor = feed.getFloor();
-        String feedName = feed.getInputFeed(); // Thay getName() bằng getFullFeedKey()
+        String feedName = feed.getInputFeed();
+        long currentTime = System.currentTimeMillis();
 
-        if (ceiling != null && value > ceiling) {
-            String subject = "Alert: " + feedName + " Exceeded Upper Threshold";
-            String text = String.format("The %s value (%.1f) has exceeded the upper threshold of %.1f.",
-                    feed.getInputFeed(), value, ceiling); // Thay getKey() bằng getFullFeedKey()
-            return emailService.sendEmail(user.getEmail(), subject, text)
-                    .doOnSuccess(v -> log.info("Sent email alert for {} exceeding ceiling: {} > {}",
-                            feedName, value, ceiling));
-        } else if (floor != null && value < floor) {
-            String subject = "Alert: " + feedName + " Below Lower Threshold";
-            String text = String.format("The %s value (%.1f) has fallen below the lower threshold of %.1f.",
-                    feed.getInputFeed(), value, floor); // Thay getKey() bằng getFullFeedKey()
-            return emailService.sendEmail(user.getEmail(), subject, text)
-                    .doOnSuccess(v -> log.info("Sent email alert for {} below floor: {} < {}",
-                            feedName, value, floor));
+        boolean isViolating = (ceiling != null && value > ceiling) || (floor != null && value < floor);
+        boolean isFirstViolation = feed.getLastViolationTime() == null;
+
+        // Send email if first time violate
+        Mono<Void> emailMono = Mono.empty();
+        if (isFirstViolation && isViolating) {
+            String subject, text;
+            if (ceiling != null && value > ceiling) {
+                subject = "Alert: " + feedName + " Exceeded Upper Threshold";
+                text = String.format("The %s value (%.1f) has exceeded the upper threshold of %.1f.",
+                        feed.getInputFeed(), value, ceiling);
+            } else {
+                subject = "Alert: " + feedName + " Below Lower Threshold";
+                text = String.format("The %s value (%.1f) has fallen below the lower threshold of %.1f.",
+                        feed.getInputFeed(), value, floor);
+            }
+            emailMono = emailService.sendEmail(user.getEmail(), subject, text)
+                    .doOnSuccess(v -> log.info("Sent email alert for {}: value = {}", feedName, value))
+                    .then(Mono.fromRunnable(() -> {
+                        feed.setLastViolationTime(currentTime);
+                        feed.setContinuousViolation(true);
+                    }));
         }
-        return Mono.empty();
+
+        // Update state and check send Mqtt message
+        Mono<Void> updateMono = Mono.just(value)
+                .flatMap(currentValue -> {
+                    if (!isViolating) {
+                        feed.setLastViolationTime(null);
+                        feed.setContinuousViolation(null);
+                    } else if (!isFirstViolation) {
+                        feed.setContinuousViolation(true);
+                    }
+
+                    Long violationStart = feed.getLastViolationTime();
+                    if (violationStart != null) {
+                        long timeSinceViolation = currentTime - violationStart;
+                        if (timeSinceViolation >= 60_000 && feed.getContinuousViolation() != null && feed.getContinuousViolation()) {
+                            if (ceiling != null && currentValue > ceiling) {
+                                String topic = user.getUsername() + "/feeds/" + feed.getOutputFeedAbove();
+                                return mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedAbove(), feed.getAboveValue())
+                                        .doOnSuccess(v -> log.info("Sent MQTT adjustment to {}: {} (value: {} > ceiling: {})",
+                                                topic, feed.getAboveValue(), currentValue, ceiling))
+                                        .then(Mono.fromRunnable(() -> {
+                                            feed.setLastViolationTime(null);
+                                            feed.setContinuousViolation(null);
+                                        }));
+                            } else if (floor != null && currentValue < floor) {
+                                String topic = user.getUsername() + "/feeds/" + feed.getOutputFeedBelow();
+                                return mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedBelow(), feed.getBelowValue())
+                                        .doOnSuccess(v -> log.info("Sent MQTT adjustment to {}: {} (value: {} < floor: {})",
+                                                topic, feed.getBelowValue(), currentValue, floor))
+                                        .then(Mono.fromRunnable(() -> {
+                                            feed.setLastViolationTime(null);
+                                            feed.setContinuousViolation(null);
+                                        }));
+                            }
+                        }
+                    }
+                    return Mono.empty();
+                })
+                .then(feedRuleRepository.save(feed))
+                .then();
+
+        return emailMono.then(updateMono);
     }
 
     public void attachHandler(MqttPahoMessageDrivenChannelAdapter adapter, User user) {

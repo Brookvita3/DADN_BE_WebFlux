@@ -2,13 +2,9 @@ package QLNKcom.example.QLNK.service.mqtt;
 
 import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.model.adafruit.Feed;
-import QLNKcom.example.QLNK.provider.user.UserProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.integration.mqtt.support.MqttHeaders;
-import org.springframework.integration.support.MessageBuilder;
-import org.springframework.messaging.Message;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -21,7 +17,7 @@ import java.util.List;
 public class MqttService {
 
     private final MqttSubscriptionManager mqttSubscriptionManager;
-    private final UserProvider userProvider;
+    private final MqttCommandService mqttCommandService;
 
     public Mono<Void> subscribeUserFeedsOnLogin(User user) {
         List<String> topics = user.getGroups().stream()
@@ -50,24 +46,8 @@ public class MqttService {
         return mqttSubscriptionManager.unsubscribeFeed(user, topic);
     }
 
-    private Message<String> createMqttMessage(String topic, String value) {
-        return MessageBuilder.withPayload(value)
-                .setHeader(MqttHeaders.TOPIC, topic)
-                .build();
-    }
-
     public Mono<Void> sendMqttCommand(String userId, String feed, String value) {
-        return userProvider.findById(userId)
-                .flatMap(user -> {
-                    String topic = user.getUsername() + "/feeds/" + feed;
-                    return mqttSubscriptionManager.getMqttPahoMessageHandler(userId)
-                            .flatMap(handler -> {
-                                Message<String> message = createMqttMessage(topic, value);
-                                handler.handleMessage(message); // Gửi lên MQTT
-                                log.info("🚀 Sent to MQTT: {} -> {}", topic, value);
-                                return Mono.empty();
-                            });
-                });
+        return mqttCommandService.sendMqttCommand(userId, feed, value);
     }
 
     public Mono<Void> unsubscribeGroupFeeds(User user, List<Feed> feeds) {
