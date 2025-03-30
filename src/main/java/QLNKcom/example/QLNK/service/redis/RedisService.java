@@ -4,8 +4,10 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoOperator;
 
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class RedisService {
@@ -39,6 +41,25 @@ public class RedisService {
         return redisTemplate.opsForValue()
                 .get(key)
                 .doOnSuccess(value -> System.out.println("✅ [REDIS] Get value success for key: " + key));
+    }
+
+    public Mono<Void> saveResetPasswordToken(String resetKey, String email) {
+        return redisTemplate.opsForValue()
+                .set(resetKey, email, Duration.ofMinutes(5))
+                .doOnSuccess(success -> System.out.println("✅ [REDIS] Save reset password token success for " + email))
+                .then();
+    }
+
+    public Mono<String> getResetPasswordToken(String resetKey) {
+        return redisTemplate.opsForValue()
+                .get(resetKey)
+                .doOnSuccess(success -> System.out.println("✅ [REDIS] Get resetKey success"));
+    }
+
+    public Mono<Void> deletePassword(String resetKey) {
+        return redisTemplate.delete(resetKey)
+                .doOnSuccess(success -> System.out.println("✅ [REDIS] Delete reset key"))
+                .then();
     }
 
 }

@@ -10,18 +10,23 @@ import QLNKcom.example.QLNK.exception.DataNotFoundException;
 import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.response.auth.AuthResponse;
 import QLNKcom.example.QLNK.service.adafruit.AdafruitService;
+import QLNKcom.example.QLNK.service.email.EmailService;
 import QLNKcom.example.QLNK.service.redis.RedisService;
 import QLNKcom.example.QLNK.service.user.CustomReactiveUserDetailsService;
 import QLNKcom.example.QLNK.provider.user.UserProvider;
 import QLNKcom.example.QLNK.service.user.UserService;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +39,10 @@ public class AuthService {
     private final RedisService redisService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
+    private final EmailService emailService;
+
+    @Value("${webapp_link}")
+    private String RESET_LINK_BASE_URL;
 
     public Mono<AuthResponse> authenticate(LoginRequest request) {
         return customReactiveUserDetailsService.findByUsername(request.getEmail())
@@ -107,6 +116,35 @@ public class AuthService {
                 })
                 .thenReturn(response)
                 .onErrorMap(error -> new AdafruitException("Exception in connect to Adafruit", HttpStatus.BAD_REQUEST));
+    }
+
+
+    public Mono<Void> sendResetPasswordLink(String email) {
+        return userProvider.findByEmail(email)
+                .flatMap(user -> {
+                    String token = UUID.randomUUID().toString();
+                    String resetKey = "reset:" + token;
+                    return redisService.saveResetPasswordToken(resetKey, email)
+                            .then(emailService.sendEmail(
+                                    email,
+                                    "Reset Your Password",
+                                    "Click the link to reset your password: " + RESET_LINK_BASE_URL + "?token=" + token +
+                                            "\nThis link expires in 5 minutes."
+                            ));
+                });
+    }
+
+    public Mono<User> resetPasswordWithToken(String token, String newPassword) {
+        String resetKey = "reset:" + token;
+        return redisService.getResetPasswordToken(resetKey)
+                .switchIfEmpty(Mono.error(new RuntimeException("Invalid or expired reset token")))
+                .flatMap(email -> userProvider.findByEmail(email)
+                        .switchIfEmpty(Mono.error(new RuntimeException("User not found")))
+                        .flatMap(user -> {
+                            user.setPassword(passwordEncoder.encode(newPassword));
+                            return userProvider.saveUser(user)
+                                    .doOnSuccess(u -> redisService.deletePassword(resetKey).subscribe());
+                        }));
     }
 
 }

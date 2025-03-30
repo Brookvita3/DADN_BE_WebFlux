@@ -40,7 +40,6 @@ public class MqttMessageHandler {
     private final FeedRuleRepository feedRuleRepository;
     private final EmailService emailService;
     private final UserProvider userProvider;
-//    private final MqttService mqttService;
     private final MqttCommandService mqttCommandService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 

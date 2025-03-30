@@ -20,21 +20,18 @@ public class EmailService {
     private String emailUsername;
 
     public Mono<Void> sendEmail(String to, String subject, String text) {
-        return Mono.fromRunnable(() -> {
-                    try {
-                        SimpleMailMessage message = new SimpleMailMessage();
-                        message.setTo(to);
-                        message.setSubject(subject);
-                        message.setText(text);
-                        message.setFrom(emailUsername); // Replace with your sender email
-                        javaMailSender.send(message);
-                        log.info("Email sent to {} with subject: {}", to, subject);
-                    } catch (Exception e) {
-                        log.error("Failed to send email to {}: {}", to, e.getMessage());
-                        throw new RuntimeException("Email sending failed", e);
-                    }
+        return Mono.fromCallable(() -> {
+                    SimpleMailMessage message = new SimpleMailMessage();
+                    message.setTo(to);
+                    message.setSubject(subject);
+                    message.setText(text);
+                    message.setFrom(emailUsername);
+                    javaMailSender.send(message);
+                    return null;
                 })
-                .subscribeOn(Schedulers.boundedElastic()) // Run on a thread pool for I/O tasks
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnSuccess(v -> log.info("Email sent to {} with subject: {}", to, subject))
+                .doOnError(e -> log.error("Failed to send email to {}: {}", to, e.getMessage()))
                 .then();
     }
 }

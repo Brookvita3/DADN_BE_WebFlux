@@ -1,9 +1,8 @@
 package QLNKcom.example.QLNK.controller.user;
 
-import QLNKcom.example.QLNK.DTO.user.CreateFeedRuleRequest;
-import QLNKcom.example.QLNK.DTO.user.UpdateFeedRuleRequest;
-import QLNKcom.example.QLNK.DTO.user.UpdateInfoRequest;
+import QLNKcom.example.QLNK.DTO.user.*;
 import QLNKcom.example.QLNK.response.ResponseObject;
+import QLNKcom.example.QLNK.service.auth.AuthService;
 import QLNKcom.example.QLNK.service.user.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +20,7 @@ import reactor.core.publisher.Mono;
 public class UserController {
 
     private final UserService userService;
+    private final AuthService authService;
 
     @PostMapping("/rule")
     public Mono<ResponseEntity<ResponseObject>> createFeedRule(@RequestBody @Valid CreateFeedRuleRequest request) {
@@ -83,4 +83,41 @@ public class UserController {
                                 .build()
                 ));
     }
+
+    @PostMapping("/forgot-password")
+    public Mono<ResponseEntity<ResponseObject>> forgotPassword(@RequestBody @Valid ForgotPasswordRequest request) {
+        return authService.sendResetPasswordLink(request.getEmail())
+                .thenReturn(ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Reset password link sent to your email")
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ))
+                .onErrorResume(Exception.class, e -> Mono.just(
+                        ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(ResponseObject.builder()
+                                        .message("Failed to send reset link: " + e.getMessage())
+                                        .status(HttpStatus.BAD_REQUEST.value())
+                                        .build())
+                ));
+    }
+
+    @PostMapping("/reset-password")
+    public Mono<ResponseEntity<ResponseObject>> resetPassword(@RequestBody @Valid ResetPasswordRequest request) {
+        return authService.resetPasswordWithToken(request.getToken(), request.getNewPassword())
+                .map(user -> ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Password reset successfully")
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ))
+                .onErrorResume(Exception.class, e -> Mono.just(
+                        ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(ResponseObject.builder()
+                                        .message("Failed to reset password: " + e.getMessage())
+                                        .status(HttpStatus.BAD_REQUEST.value())
+                                        .build())
+                ));
+    }
+
 }

@@ -31,6 +31,8 @@ public class WebSecurityConfig {
     public SecurityWebFilterChain securityFilterChain(ServerHttpSecurity http, ServerSecurityContextRepository securityContextRepository) {
         http.authorizeExchange(auth -> auth
                 .pathMatchers("/", "/" + apiPrefix + "/auth/**").permitAll()
+                .pathMatchers("/" + apiPrefix + "/user/forgot-password").permitAll()
+                .pathMatchers("/" + apiPrefix + "/user/reset-password").permitAll()
                 .pathMatchers("/" + apiPrefix + "/auth/logout").authenticated()
                 .pathMatchers("/" + apiPrefix + "/**").authenticated()
                 .anyExchange().authenticated()
