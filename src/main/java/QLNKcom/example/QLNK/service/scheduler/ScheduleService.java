@@ -7,6 +7,7 @@ import QLNKcom.example.QLNK.repository.ScheduleRepository;
 import lombok.RequiredArgsConstructor;
 import org.quartz.*;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Service
@@ -59,40 +60,46 @@ public class ScheduleService {
         }
     }
 
+    public Flux<Schedule> getSchedulesByEmailAndFullFeedKey(String email, String fullFeedKey) {
+        return Flux.from(userProvider.findByEmail(email))
+                        .flatMap(user -> scheduleRepository.findByUserIdAndFullFeedKey(user.getId(), fullFeedKey));
+    }
+
+    public Mono<Void> deleteSchedulesById(String idSchedule) {
+        return scheduleRepository.deleteById(idSchedule);
+    }
+
     private Trigger buildTrigger(Schedule schedule) {
         String[] timeParts = schedule.getTime().split(":");
         int hour = Integer.parseInt(timeParts[0]);
         int minute = Integer.parseInt(timeParts[1]);
 
-        switch (schedule.getType()) {
-            case ONCE:
+        return switch (schedule.getType()) {
+            case ONCE -> {
                 java.time.LocalDateTime dateTime = java.time.LocalDateTime.now()
                         .withDayOfMonth(schedule.getDay())
                         .withHour(hour)
                         .withMinute(minute)
                         .withSecond(0);
-                return TriggerBuilder.newTrigger()
+                yield TriggerBuilder.newTrigger()
                         .withIdentity(schedule.getId(), "schedule-triggers")
                         .startAt(java.util.Date.from(dateTime.atZone(java.time.ZoneId.systemDefault()).toInstant()))
                         .build();
-            case DAILY:
-                return TriggerBuilder.newTrigger()
-                        .withIdentity(schedule.getId(), "schedule-triggers")
-                        .withSchedule(CronScheduleBuilder.dailyAtHourAndMinute(hour, minute))
-                        .build();
-            case WEEKLY:
-                return TriggerBuilder.newTrigger()
-                        .withIdentity(schedule.getId(), "schedule-triggers")
-                        .withSchedule(CronScheduleBuilder.weeklyOnDayAndHourAndMinute(schedule.getDayOfWeek(), hour, minute))
-                        .build();
-            case MONTHLY:
-                return TriggerBuilder.newTrigger()
-                        .withIdentity(schedule.getId(), "schedule-triggers")
-                        .withSchedule(CronScheduleBuilder.monthlyOnDayAndHourAndMinute(schedule.getDay(), hour, minute))
-                        .build();
-            default:
-                throw new IllegalArgumentException("Invalid schedule type");
-        }
+            }
+            case DAILY -> TriggerBuilder.newTrigger()
+                    .withIdentity(schedule.getId(), "schedule-triggers")
+                    .withSchedule(CronScheduleBuilder.dailyAtHourAndMinute(hour, minute))
+                    .build();
+            case WEEKLY -> TriggerBuilder.newTrigger()
+                    .withIdentity(schedule.getId(), "schedule-triggers")
+                    .withSchedule(CronScheduleBuilder.weeklyOnDayAndHourAndMinute(schedule.getDayOfWeek(), hour, minute))
+                    .build();
+            case MONTHLY -> TriggerBuilder.newTrigger()
+                    .withIdentity(schedule.getId(), "schedule-triggers")
+                    .withSchedule(CronScheduleBuilder.monthlyOnDayAndHourAndMinute(schedule.getDay(), hour, minute))
+                    .build();
+            default -> throw new IllegalArgumentException("Invalid schedule type");
+        };
     }
 
 }

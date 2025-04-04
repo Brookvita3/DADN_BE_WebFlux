@@ -97,4 +97,47 @@ public class FeedController {
                                         .build())
                 ));
     }
+
+    @GetMapping("/{groupKey}/feeds/{fullFeedKey}/scheduler")
+    public Mono<ResponseEntity<ResponseObject>> getFeedSchedules(
+            @PathVariable String fullFeedKey) {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(context -> context.getAuthentication().getName())
+                .flatMap(email -> scheduleService.getSchedulesByEmailAndFullFeedKey(email, fullFeedKey)
+                        .collectList()
+                        .map(schedules -> ResponseEntity.ok(
+                                ResponseObject.builder()
+                                        .message("Schedules retrieved successfully")
+                                        .status(HttpStatus.OK.value())
+                                        .data(schedules)
+                                        .build()
+                                )))
+                .onErrorResume(Exception.class, e -> Mono.just(
+                        ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(ResponseObject.builder()
+                                        .message("Failed to retrieve schedules: " + e.getMessage())
+                                        .status(HttpStatus.BAD_REQUEST.value())
+                                        .build())
+                ));
+    }
+
+    @DeleteMapping("/{groupKey}/feeds/{fullFeedKey}/scheduler")
+    public Mono<ResponseEntity<ResponseObject>> deleteFeedSchedules(
+            @RequestParam String id) {
+        return scheduleService.deleteSchedulesById(id)
+                .thenReturn(ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Schedules delete successfully")
+                                .status(HttpStatus.OK.value())
+                                .data(null)
+                                .build()
+                ))
+                .onErrorResume(Exception.class, e -> Mono.just(
+                        ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(ResponseObject.builder()
+                                        .message("Failed to retrieve schedules: " + e.getMessage())
+                                        .status(HttpStatus.BAD_REQUEST.value())
+                                        .build())
+                ));
+    }
 }
