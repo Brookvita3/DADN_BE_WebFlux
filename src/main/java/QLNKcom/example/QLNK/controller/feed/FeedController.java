@@ -2,7 +2,9 @@ package QLNKcom.example.QLNK.controller.feed;
 
 import QLNKcom.example.QLNK.DTO.feed.CreateFeedRequest;
 import QLNKcom.example.QLNK.DTO.feed.UpdateFeedRequest;
+import QLNKcom.example.QLNK.DTO.user.ScheduleRequest;
 import QLNKcom.example.QLNK.response.ResponseObject;
+import QLNKcom.example.QLNK.service.scheduler.ScheduleService;
 import QLNKcom.example.QLNK.service.user.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +23,7 @@ import reactor.core.publisher.Mono;
 public class FeedController {
 
     private final UserService userService;
+    private final ScheduleService scheduleService;
 
     @PostMapping("/{groupKey}/feeds")
     public Mono<ResponseEntity<ResponseObject>> createFeed(
@@ -69,6 +72,29 @@ public class FeedController {
                                 .data(feed)
                                 .status(HttpStatus.OK.value())
                                 .build()
+                ));
+    }
+
+    @PostMapping("/{groupKey}/feeds/{fullFeedKey}/scheduler")
+    public Mono<ResponseEntity<ResponseObject>> createSchedule(
+            @PathVariable String fullFeedKey,
+            @RequestBody @Valid ScheduleRequest request) {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(context -> context.getAuthentication().getName())
+                .flatMap(email -> scheduleService.createSchedule(email, fullFeedKey, request))
+                .map(schedule -> ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Schedule created successfully")
+                                .status(HttpStatus.OK.value())
+                                .data(schedule)
+                                .build()
+                ))
+                .onErrorResume(Exception.class, e -> Mono.just(
+                        ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(ResponseObject.builder()
+                                        .message("Failed to create schedule: " + e.getMessage())
+                                        .status(HttpStatus.BAD_REQUEST.value())
+                                        .build())
                 ));
     }
 }
