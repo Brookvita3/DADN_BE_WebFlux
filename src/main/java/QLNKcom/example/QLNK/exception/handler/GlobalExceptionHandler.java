@@ -3,6 +3,7 @@ package QLNKcom.example.QLNK.exception.handler;
 import QLNKcom.example.QLNK.exception.AdafruitException;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.exception.DataNotFoundException;
+import QLNKcom.example.QLNK.exception.InvalidPasswordException;
 import QLNKcom.example.QLNK.response.ResponseObject;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -104,5 +105,16 @@ public class GlobalExceptionHandler {
                 .build();
 
         return Mono.just(ResponseEntity.internalServerError().body(response));
+    }
+
+    @ExceptionHandler(InvalidPasswordException.class)
+    public Mono<ResponseEntity<ResponseObject>> handleInvalidPasswordException(InvalidPasswordException ex) {
+        ResponseObject response = ResponseObject.builder()
+                .message(ex.getMessage())
+                .status(ex.getHttpStatus().value())
+                .data(null)
+                .build();
+
+        return Mono.just(ResponseEntity.status(ex.getHttpStatus()).body(response));
     }
 }

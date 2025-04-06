@@ -10,6 +10,7 @@ import QLNKcom.example.QLNK.DTO.user.UpdateFeedRuleRequest;
 import QLNKcom.example.QLNK.DTO.user.UpdateInfoRequest;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.exception.DataNotFoundException;
+import QLNKcom.example.QLNK.exception.InvalidPasswordException;
 import QLNKcom.example.QLNK.model.User;
 import QLNKcom.example.QLNK.model.adafruit.Feed;
 import QLNKcom.example.QLNK.model.adafruit.Group;
@@ -232,7 +233,10 @@ public class UserService {
                     String oldEmail = user.getEmail();
 
                     user.setEmail(request.getEmail());
-                    user.setPassword(passwordEncoder.encode(request.getPassword()));
+                    if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+                        return Mono.error(new InvalidPasswordException("Password is invalid", HttpStatus.BAD_REQUEST));
+                    }
+                    user.setPassword(passwordEncoder.encode(request.getNewPassword()));
                     user.setApikey(request.getApikey());
                     return userProvider.saveUser(user).flatMap(
                             updatedUser -> {
