@@ -232,12 +232,23 @@ public class UserService {
                 .flatMap(user -> {
                     String oldEmail = user.getEmail();
 
-                    user.setEmail(request.getEmail());
-                    if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
-                        return Mono.error(new InvalidPasswordException("Password is invalid", HttpStatus.BAD_REQUEST));
+                    if (request.getEmail() != null) {
+                        user.setEmail(request.getEmail());
                     }
-                    user.setPassword(passwordEncoder.encode(request.getNewPassword()));
-                    user.setApikey(request.getApikey());
+
+                    if (request.getApikey() != null) {
+                        user.setApikey(request.getApikey());
+                    }
+
+                    if (request.getOldPassword() != null && request.getNewPassword() != null) {
+                        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+                            return Mono.error(new InvalidPasswordException("Password is invalid", HttpStatus.BAD_REQUEST));
+                        }
+                        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+                    } else if (request.getOldPassword() != null || request.getNewPassword() != null) {
+                        return Mono.error(new IllegalArgumentException("Both oldPassword and password must be provided to update password"));
+                    }
+
                     return userProvider.saveUser(user).flatMap(
                             updatedUser -> {
                                 if (!oldEmail.equals(request.getEmail())) {
