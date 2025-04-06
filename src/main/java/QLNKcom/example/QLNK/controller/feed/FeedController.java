@@ -2,7 +2,7 @@ package QLNKcom.example.QLNK.controller.feed;
 
 import QLNKcom.example.QLNK.DTO.feed.CreateFeedRequest;
 import QLNKcom.example.QLNK.DTO.feed.UpdateFeedRequest;
-import QLNKcom.example.QLNK.DTO.user.ScheduleRequest;
+import QLNKcom.example.QLNK.DTO.user.CreateScheduleRequest;
 import QLNKcom.example.QLNK.response.ResponseObject;
 import QLNKcom.example.QLNK.service.scheduler.ScheduleService;
 import QLNKcom.example.QLNK.service.user.UserService;
@@ -78,7 +78,7 @@ public class FeedController {
     @PostMapping("/{groupKey}/feeds/{fullFeedKey}/scheduler")
     public Mono<ResponseEntity<ResponseObject>> createSchedule(
             @PathVariable String fullFeedKey,
-            @RequestBody @Valid ScheduleRequest request) {
+            @RequestBody @Valid CreateScheduleRequest request) {
         return ReactiveSecurityContextHolder.getContext()
                 .map(context -> context.getAuthentication().getName())
                 .flatMap(email -> scheduleService.createSchedule(email, fullFeedKey, request))

@@ -1,6 +1,6 @@
 package QLNKcom.example.QLNK.service.scheduler;
 
-import QLNKcom.example.QLNK.DTO.user.ScheduleRequest;
+import QLNKcom.example.QLNK.DTO.user.CreateScheduleRequest;
 import QLNKcom.example.QLNK.model.data.Schedule;
 import QLNKcom.example.QLNK.provider.user.UserProvider;
 import QLNKcom.example.QLNK.repository.ScheduleRepository;
@@ -18,7 +18,7 @@ public class ScheduleService {
     private final UserProvider userProvider;
     private final Scheduler quartzScheduler;
 
-    public Mono<Schedule> createSchedule(String email, String fullFeedKey, ScheduleRequest request) {
+    public Mono<Schedule> createSchedule(String email, String fullFeedKey, CreateScheduleRequest request) {
 
         return userProvider.findByEmail(email)
                 .flatMap(user -> {
@@ -29,6 +29,7 @@ public class ScheduleService {
                             .type(request.getType())
                             .time(request.getTime())
                             .day(request.getDay())
+                            .note(request.getNote())
                             .dayOfWeek(request.getDayOfWeek())
                             .build();
                     return scheduleRepository.save(schedule)

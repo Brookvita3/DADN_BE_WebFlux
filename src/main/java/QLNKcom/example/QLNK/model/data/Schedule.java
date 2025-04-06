@@ -20,4 +20,5 @@ public class Schedule {
     private Integer day;
     private Integer dayOfWeek;
     private String jobKey;
+    private String note;
 }

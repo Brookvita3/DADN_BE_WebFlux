@@ -7,7 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 @Data
-public class ScheduleRequest {
+public class CreateScheduleRequest {
     @NotNull(message = "Value is required")
     private Double value;
 
@@ -16,6 +16,9 @@ public class ScheduleRequest {
 
     @NotBlank(message = "Time is required")
     private String time;
+
+    @NotBlank(message = "Note is required")
+    private String note;
 
     private Integer day;
 
