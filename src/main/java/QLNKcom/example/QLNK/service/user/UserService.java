@@ -9,6 +9,7 @@ import QLNKcom.example.QLNK.DTO.user.RegisterRequest;
 import QLNKcom.example.QLNK.DTO.user.UpdateFeedRuleRequest;
 import QLNKcom.example.QLNK.DTO.user.UpdateInfoRequest;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
+import QLNKcom.example.QLNK.exception.DataDuplicateException;
 import QLNKcom.example.QLNK.exception.DataNotFoundException;
 import QLNKcom.example.QLNK.exception.InvalidPasswordException;
 import QLNKcom.example.QLNK.model.User;
@@ -94,20 +95,35 @@ public class UserService {
     }
 
     public Mono<FeedRule> createFeedRule(String email, CreateFeedRuleRequest request) {
+        return userProvider.findByEmail(email)
+                .switchIfEmpty(Mono.error(new RuntimeException("User not found")))
+                .flatMap(user -> feedRuleRepository.findByInputFeedAndOutputFeedAboveAndOutputFeedBelow(request.getInputFeed(), request.getOutputFeedAbove(),request.getOutputFeedBelow())
+                        .hasElement()
+                        .flatMap(hasDuplicate -> {
+                            if (hasDuplicate) {
+                                return Mono.error(new DataDuplicateException(
+                                        "FeedRule already exists for inputFeed: " +
+                                                request.getInputFeed() +
+                                                ", outputFeedAbove: " +
+                                                request.getOutputFeedAbove() +
+                                                ", outputFeedBelow: " +
+                                                request.getOutputFeedBelow(),
+                                        HttpStatus.BAD_REQUEST));
+                            }
 
-        FeedRule newFeedRule = FeedRule.builder()
-                .groupKey(request.getInputFeed().split("\\.")[0])
-                .email(email)
-                .inputFeed(request.getInputFeed())
-                .floor(request.getFloor())
-                .ceiling(request.getCeiling())
-                .aboveValue(request.getAboveValue())
-                .belowValue(request.getBelowValue())
-                .outputFeedAbove(request.getOutputFeedAbove())
-                .outputFeedBelow(request.getOutputFeedBelow())
-                .build();
-
-        return feedRuleRepository.save(newFeedRule);
+                            FeedRule newFeedRule = FeedRule.builder()
+                                    .groupKey(request.getInputFeed().split("\\.")[0])
+                                    .email(email)
+                                    .inputFeed(request.getInputFeed())
+                                    .floor(request.getFloor())
+                                    .ceiling(request.getCeiling())
+                                    .aboveValue(request.getAboveValue())
+                                    .belowValue(request.getBelowValue())
+                                    .outputFeedAbove(request.getOutputFeedAbove())
+                                    .outputFeedBelow(request.getOutputFeedBelow())
+                                    .build();
+                            return feedRuleRepository.save(newFeedRule);
+                        }));
     }
 
     public Mono<Group> createGroupByEmail(CreateGroupRequest request, String email) {
@@ -228,7 +244,6 @@ public class UserService {
 
     public Mono<User> updateInfo(String email, UpdateInfoRequest request) {
         return userProvider.findByEmail(email)
-                .switchIfEmpty(Mono.error(new RuntimeException("User not found")))
                 .flatMap(user -> {
                     String oldEmail = user.getEmail();
 
@@ -273,7 +288,24 @@ public class UserService {
                     feedRule.setAboveValue(request.getAboveValue());
                     feedRule.setBelowValue(request.getBelowValue());
 
-                    return feedRuleRepository.save(feedRule);
+                    return feedRuleRepository.findByInputFeedAndOutputFeedAboveAndOutputFeedBelow(
+                                    feedRule.getInputFeed(),
+                                    feedRule.getOutputFeedAbove(),
+                                    feedRule.getOutputFeedBelow())
+                            .hasElement()
+                            .flatMap(hasDuplicate -> {
+                                if (hasDuplicate) {
+                                    return Mono.error(new DataDuplicateException(
+                                            "FeedRule already exists for inputFeed: " +
+                                                    feedRule.getInputFeed() +
+                                                    ", outputFeedAbove: " +
+                                                    feedRule.getOutputFeedAbove() +
+                                                    ", outputFeedBelow: " +
+                                                    feedRule.getOutputFeedBelow(),
+                                            HttpStatus.BAD_REQUEST));
+                                }
+                                return feedRuleRepository.save(feedRule);
+                            });
                 });
     }
 
