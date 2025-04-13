@@ -37,6 +37,22 @@ public class UserController {
                 ));
     }
 
+    @GetMapping("/rule")
+    public Mono<ResponseEntity<ResponseObject>> getFeedRules(
+            @RequestParam(value = "feedname", required = false) String feedName) {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getName)
+                .flatMap(email -> userService.getFeedRules(email, feedName).collectList())
+                .map(feedRules -> ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Get feed rule successfully")
+                                .data(feedRules)
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ));
+    }
+
     @GetMapping("/info")
     public Mono<ResponseEntity<ResponseObject>> getInfo() {
         return ReactiveSecurityContextHolder.getContext()

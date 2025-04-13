@@ -277,4 +277,10 @@ public class UserService {
                 });
     }
 
+    public Flux<FeedRule> getFeedRules(String email, String feedName) {
+        return feedRuleRepository.findByEmail(email)
+                .filter(feedRule -> feedName == null || feedName.isBlank() || feedRule.getInputFeed().equals(feedName));
+    }
+
+
 }
