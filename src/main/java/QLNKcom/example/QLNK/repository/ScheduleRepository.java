@@ -6,4 +6,5 @@ import reactor.core.publisher.Flux;
 
 public interface ScheduleRepository extends ReactiveMongoRepository<Schedule, String> {
     Flux<Schedule> findByUserIdAndFullFeedKey(String userId, String fullFeedKey);
+    Flux<Schedule> findByUserId(String userId);
 }

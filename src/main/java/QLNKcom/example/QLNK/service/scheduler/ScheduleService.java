@@ -103,4 +103,9 @@ public class ScheduleService {
         };
     }
 
+    public Flux<Schedule> getUserSchedules(String email) {
+        return Flux.from(userProvider.findByEmail(email)
+                .flatMapMany(user -> scheduleRepository.findByUserId(user.getId())));
+    }
+
 }

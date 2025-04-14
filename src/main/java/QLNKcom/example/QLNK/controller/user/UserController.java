@@ -3,6 +3,7 @@ package QLNKcom.example.QLNK.controller.user;
 import QLNKcom.example.QLNK.DTO.user.*;
 import QLNKcom.example.QLNK.response.ResponseObject;
 import QLNKcom.example.QLNK.service.auth.AuthService;
+import QLNKcom.example.QLNK.service.scheduler.ScheduleService;
 import QLNKcom.example.QLNK.service.user.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ public class UserController {
 
     private final UserService userService;
     private final AuthService authService;
+    private final ScheduleService scheduleService;
 
     @PostMapping("/rule")
     public Mono<ResponseEntity<ResponseObject>> createFeedRule(@RequestBody @Valid CreateFeedRuleRequest request) {
@@ -133,6 +135,21 @@ public class UserController {
                                         .message("Failed to reset password: " + e.getMessage())
                                         .status(HttpStatus.BAD_REQUEST.value())
                                         .build())
+                ));
+    }
+
+    @GetMapping("/schedules")
+    public Mono<ResponseEntity<ResponseObject>> getUserScheduler() {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getName)
+                .flatMap(email -> scheduleService.getUserSchedules(email).collectList())
+                .map(schedulers -> ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Get all scheduler of this user successfully")
+                                .data(schedulers)
+                                .status(HttpStatus.OK.value())
+                                .build()
                 ));
     }
 
