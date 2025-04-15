@@ -18,7 +18,6 @@ import QLNKcom.example.QLNK.model.adafruit.Group;
 import QLNKcom.example.QLNK.model.data.FeedRule;
 import QLNKcom.example.QLNK.provider.user.UserProvider;
 import QLNKcom.example.QLNK.repository.FeedRuleRepository;
-import QLNKcom.example.QLNK.repository.ScheduleRepository;
 import QLNKcom.example.QLNK.service.adafruit.AdafruitService;
 import QLNKcom.example.QLNK.service.mqtt.MqttService;
 import QLNKcom.example.QLNK.service.mqtt.MqttSubscriptionManager;
@@ -222,12 +221,14 @@ public class UserService {
                 .flatMap(user -> userProvider.updateFeedInGroup(user, groupKey, oldFullFeedKey, request)
                         .flatMap(feed -> adafruitService.updateFeed(user.getUsername(), user.getApikey(), groupKey, oldFullFeedKey, request)
                                 .then(Mono.defer(() -> {
-                                    if (!oldFullFeedKey.equals(newFullFeedKey)) {
-                                        return mqttService.updateFeedSubscription(user, oldFullFeedKey, newFullFeedKey);
-                                    }
-                                    return Mono.empty();
+                                    Mono<Void> mqttUpdate = !oldFullFeedKey.equals(newFullFeedKey)
+                                            ? mqttService.updateFeedSubscription(user, oldFullFeedKey, newFullFeedKey)
+                                            : Mono.empty();
+                                    return mqttUpdate
+                                            .then(updateFeedRulesForFeed(email, oldFullFeedKey, newFullFeedKey)) // Update feed rules
+                                            .then(scheduleService.updateSchedulesForFeed(user.getId(), oldFullFeedKey, newFullFeedKey)); // Update schedules
                                 }))
-                                .then(userProvider.saveUser(user)) // Save here since updateFeedInGroup doesn’t
+                                .then(userProvider.saveUser(user)) // Save user after all updates
                                 .thenReturn(feed)))
                 .doOnSuccess(feed -> log.info("Updated feed {} to {} for user {}", oldFullFeedKey, newFullFeedKey, email))
                 .doOnError(e -> log.error("Error updating feed for {}: {}", email, e.getMessage()));
@@ -320,6 +321,27 @@ public class UserService {
     public Flux<FeedRule> getFeedRules(String email, String feedName) {
         return feedRuleRepository.findByEmail(email)
                 .filter(feedRule -> feedName == null || feedName.isBlank() || feedRule.getInputFeed().equals(feedName));
+    }
+
+    private Mono<Void> updateFeedRulesForFeed(String email, String oldFullFeedKey, String newFullFeedKey) {
+        return feedRuleRepository.findByEmailAndInputFeed(email, oldFullFeedKey)
+                .flatMap(rule -> {
+                    boolean updated = false;
+                    if (oldFullFeedKey.equals(rule.getInputFeed())) {
+                        rule.setInputFeed(newFullFeedKey);
+                        updated = true;
+                    }
+                    if (oldFullFeedKey.equals(rule.getOutputFeedAbove())) {
+                        rule.setOutputFeedAbove(newFullFeedKey);
+                        updated = true;
+                    }
+                    if (oldFullFeedKey.equals(rule.getOutputFeedBelow())) {
+                        rule.setOutputFeedBelow(newFullFeedKey);
+                        updated = true;
+                    }
+                    return updated ? feedRuleRepository.save(rule).then(Mono.empty()) : Mono.empty();
+                })
+                .then();
     }
 
 

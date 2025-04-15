@@ -184,4 +184,13 @@ public class ScheduleService {
         return userProvider.findByEmail(email)
                 .flatMapMany(user -> scheduleRepository.findByUserId(user.getId()));
     }
+
+    public Mono<Void> updateSchedulesForFeed(String userId, String oldFullFeedKey, String newFullFeedKey) {
+        return scheduleRepository.findByUserIdAndFullFeedKey(userId, oldFullFeedKey)
+                .flatMap(schedule -> {
+                    schedule.setFullFeedKey(newFullFeedKey);
+                    return scheduleRepository.save(schedule).then(Mono.empty());
+                })
+                .then();
+    }
 }
