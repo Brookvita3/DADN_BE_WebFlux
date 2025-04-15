@@ -10,6 +10,7 @@ import org.quartz.*;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @Slf4j
 @Service
@@ -43,25 +44,28 @@ public class ScheduleService {
     }
 
     private void scheduleJob(Schedule schedule) {
-        try {
-            JobDataMap jobDataMap = new JobDataMap();
-            jobDataMap.put("userId", schedule.getUserId());
-            jobDataMap.put("fullFeedKey", schedule.getFullFeedKey());
-            jobDataMap.put("value", schedule.getValue());
+        Mono.fromRunnable(() -> {
+            try {
+                JobDataMap jobDataMap = new JobDataMap();
+                jobDataMap.put("userId", schedule.getUserId());
+                jobDataMap.put("fullFeedKey", schedule.getFullFeedKey());
+                jobDataMap.put("value", schedule.getValue());
 
-            JobDetail job = JobBuilder.newJob(SendValueJob.class)
-                    .withIdentity(schedule.getJobKey(), "schedule-jobs")
-                    .usingJobData(jobDataMap)
-                    .build();
+                JobDetail job = JobBuilder.newJob(SendValueJob.class)
+                        .withIdentity(schedule.getJobKey(), "schedule-jobs")
+                        .usingJobData(jobDataMap)
+                        .build();
 
-            Trigger trigger = buildTrigger(schedule);
-            quartzScheduler.scheduleJob(job, trigger);
-            log.info("Scheduled job for schedule: {}, jobKey: {}", schedule.getId(), schedule.getJobKey());
-        } catch (SchedulerException e) {
-            log.error("Failed to schedule job for schedule: {}, jobKey: {}", schedule.getId(), schedule.getJobKey(), e);
-            throw new RuntimeException("Failed to schedule job", e);
-        }
+                Trigger trigger = buildTrigger(schedule);
+                quartzScheduler.scheduleJob(job, trigger);
+                log.info("Scheduled job for schedule: {}, jobKey: {}", schedule.getId(), schedule.getJobKey());
+            } catch (SchedulerException e) {
+                log.error("Failed to schedule job for schedule: {}, jobKey: {}", schedule.getId(), schedule.getJobKey(), e);
+                throw new RuntimeException("Failed to schedule job", e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic()).subscribe();
     }
+
 
     public Flux<Schedule> getSchedulesByEmailAndFullFeedKey(String email, String fullFeedKey) {
         return userProvider.findByEmail(email)
@@ -70,7 +74,7 @@ public class ScheduleService {
 
     public Mono<Void> deleteSchedulesById(String idSchedule) {
         return scheduleRepository.findById(idSchedule)
-                .flatMap(schedule -> {
+                .flatMap(schedule -> Mono.fromRunnable(() -> {
                     if (schedule.getJobKey() != null) {
                         try {
                             JobKey jobKey = new JobKey(schedule.getJobKey(), "schedule-jobs");
@@ -82,18 +86,18 @@ public class ScheduleService {
                             }
                         } catch (SchedulerException e) {
                             log.error("Failed to delete Quartz job for schedule: {}, jobKey: {}", schedule.getId(), schedule.getJobKey(), e);
-                            return Mono.error(new RuntimeException("Failed to delete Quartz job", e));
+                            throw new RuntimeException("Failed to delete Quartz job", e);
                         }
                     } else {
                         log.warn("No jobKey found for schedule: {}", schedule.getId());
                     }
-                    return scheduleRepository.deleteById(idSchedule);
-                });
+                }).subscribeOn(Schedulers.boundedElastic()).then(scheduleRepository.deleteById(idSchedule)));
     }
+
 
     public Mono<Void> deleteSchedulesByUserIdAndFullFeedKey(String userId, String fullFeedKey) {
         return scheduleRepository.findByUserIdAndFullFeedKey(userId, fullFeedKey)
-                .flatMap(schedule -> {
+                .flatMap(schedule -> Mono.fromRunnable(() -> {
                     if (schedule.getJobKey() != null) {
                         try {
                             JobKey jobKey = new JobKey(schedule.getJobKey(), "schedule-jobs");
@@ -105,43 +109,43 @@ public class ScheduleService {
                             }
                         } catch (SchedulerException e) {
                             log.error("Failed to delete Quartz job for schedule: {}, jobKey: {}", schedule.getId(), schedule.getJobKey(), e);
-                            return Mono.error(new RuntimeException("Failed to delete Quartz job", e));
+                            throw new RuntimeException("Failed to delete Quartz job", e);
                         }
                     } else {
                         log.warn("No jobKey found for schedule: {}", schedule.getId());
                     }
-                    return Mono.just(schedule);
-                })
+                }).subscribeOn(Schedulers.boundedElastic()).thenReturn(schedule))
                 .then(scheduleRepository.deleteByUserIdAndFullFeedKey(userId, fullFeedKey));
     }
+
 
     public Mono<Void> rescheduleUserSchedules(String userId) {
         return scheduleRepository.findByUserId(userId)
                 .flatMap(schedule -> {
-                    try {
-                        if (schedule.getJobKey() == null) {
-                            schedule.setJobKey(schedule.getId());
-                            return scheduleRepository.save(schedule)
-                                    .doOnSuccess(saved -> {
-                                        scheduleJob(saved);
-                                        log.info("Rescheduled job for schedule: {}, jobKey: {}", saved.getId(), saved.getJobKey());
-                                    });
-                        }
-                        JobKey jobKey = new JobKey(schedule.getJobKey(), "schedule-jobs");
-                        if (!quartzScheduler.checkExists(jobKey)) {
-                            scheduleJob(schedule);
-                            log.info("Rescheduled job for schedule: {}, jobKey: {}", schedule.getId(), schedule.getJobKey());
-                        } else {
-                            log.info("Job already exists for schedule: {}, jobKey: {}", schedule.getId(), schedule.getJobKey());
-                        }
-                        return Mono.just(schedule);
-                    } catch (SchedulerException e) {
-                        log.error("Failed to reschedule job for schedule: {}, jobKey: {}", schedule.getId(), schedule.getJobKey(), e);
-                        return Mono.error(new RuntimeException("Failed to reschedule Quartz job", e));
+                    if (schedule.getJobKey() == null) {
+                        schedule.setJobKey(schedule.getId());
+                        return scheduleRepository.save(schedule)
+                                .doOnSuccess(this::scheduleJob);
                     }
+
+                    return Mono.fromRunnable(() -> {
+                        try {
+                            JobKey jobKey = new JobKey(schedule.getJobKey(), "schedule-jobs");
+                            if (!quartzScheduler.checkExists(jobKey)) {
+                                scheduleJob(schedule);
+                                log.info("Rescheduled job for schedule: {}, jobKey: {}", schedule.getId(), schedule.getJobKey());
+                            } else {
+                                log.info("Job already exists for schedule: {}, jobKey: {}", schedule.getId(), schedule.getJobKey());
+                            }
+                        } catch (SchedulerException e) {
+                            log.error("Failed to reschedule job for schedule: {}, jobKey: {}", schedule.getId(), schedule.getJobKey(), e);
+                            throw new RuntimeException("Failed to reschedule Quartz job", e);
+                        }
+                    }).subscribeOn(Schedulers.boundedElastic()).thenReturn(schedule);
                 })
                 .then();
     }
+
 
     private Trigger buildTrigger(Schedule schedule) {
         String[] timeParts = schedule.getTime().split(":");
