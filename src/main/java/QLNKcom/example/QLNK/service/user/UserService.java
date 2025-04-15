@@ -344,5 +344,12 @@ public class UserService {
                 .then();
     }
 
+    public Mono<Long> deleteFeedRule(String email, String fullFeedKey) {
+        return feedRuleRepository.findByEmailAndFeedKey(email, fullFeedKey)
+                .flatMap(rule -> feedRuleRepository.delete(rule).thenReturn(1L))
+                .count()
+                .doOnSuccess(count -> log.info("Deleted {} feed rules for email {} and feed {}", count, email, fullFeedKey))
+                .doOnError(e -> log.error("Error deleting feed rules for email {} and feed {}: {}", email, fullFeedKey, e.getMessage()));
+    }
 
 }

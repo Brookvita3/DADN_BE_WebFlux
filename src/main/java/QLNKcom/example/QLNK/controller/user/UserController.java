@@ -41,7 +41,7 @@ public class UserController {
 
     @GetMapping("/rule")
     public Mono<ResponseEntity<ResponseObject>> getFeedRules(
-            @RequestParam(value = "feedname", required = false) String feedName) {
+            @RequestParam(value = "feed", required = false) String feedName) {
         return ReactiveSecurityContextHolder.getContext()
                 .map(SecurityContext::getAuthentication)
                 .map(Authentication::getName)
@@ -97,6 +97,22 @@ public class UserController {
                         ResponseObject.builder()
                                 .message("Update feed rule rule successfully")
                                 .data(feedRule)
+                                .status(HttpStatus.OK.value())
+                                .build()
+                ));
+    }
+
+    @DeleteMapping("/rule")
+    public Mono<ResponseEntity<ResponseObject>> deleteFeedRule(
+            @RequestParam("feed") String fullFeedKey) {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getName)
+                .flatMap(email -> userService.deleteFeedRule(email, fullFeedKey))
+                .map(number -> ResponseEntity.ok(
+                        ResponseObject.builder()
+                                .message("Delete feed rule successfully")
+                                .data(String.format("Deleted %s feed rule", number))
                                 .status(HttpStatus.OK.value())
                                 .build()
                 ));
