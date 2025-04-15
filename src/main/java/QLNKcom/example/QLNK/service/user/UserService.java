@@ -18,9 +18,11 @@ import QLNKcom.example.QLNK.model.adafruit.Group;
 import QLNKcom.example.QLNK.model.data.FeedRule;
 import QLNKcom.example.QLNK.provider.user.UserProvider;
 import QLNKcom.example.QLNK.repository.FeedRuleRepository;
+import QLNKcom.example.QLNK.repository.ScheduleRepository;
 import QLNKcom.example.QLNK.service.adafruit.AdafruitService;
 import QLNKcom.example.QLNK.service.mqtt.MqttService;
 import QLNKcom.example.QLNK.service.mqtt.MqttSubscriptionManager;
+import QLNKcom.example.QLNK.service.scheduler.ScheduleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -41,6 +43,7 @@ public class UserService {
     private final MqttService mqttService;
     private final MqttSubscriptionManager mqttSubscriptionManager;
     private final FeedRuleRepository feedRuleRepository;
+    private final ScheduleService scheduleService;
 
     private Mono<Boolean> isGroupExists(User user, String groupName) {
         return Mono.just(user.getGroups().stream()
@@ -146,7 +149,7 @@ public class UserService {
         return userProvider.findByEmail(email).map(User::getGroups);
     }
 
-    public Mono<Void> deleteFeed(String email, String groupKey, String feedKey) {
+    public Mono<Void> deleteFeed(String email, String groupKey, String fullFeedKey) {
         return userProvider.findByEmail(email)
                 .flatMap(user -> {
 
@@ -156,14 +159,19 @@ public class UserService {
                             .orElseThrow(() -> new DataNotFoundException("Group not found", HttpStatus.NOT_FOUND));
 
                     Feed feed = group.getFeeds().stream()
-                            .filter(f -> f.getKey().equals(feedKey))
+                            .filter(f -> f.getKey().equals(fullFeedKey))
                             .findFirst()
                             .orElseThrow(() -> new DataNotFoundException("Feed not found", HttpStatus.NOT_FOUND));
 
-                    return adafruitService.deleteFeed(user.getUsername(), user.getApikey(), feedKey)
+                    return adafruitService.deleteFeed(user.getUsername(), user.getApikey(), fullFeedKey)
                             .onErrorResume(e -> Mono.error(new CustomAuthException("Failed to delete feed on Adafruit: " + e.getMessage(), HttpStatus.BAD_REQUEST)))
-                            .then(userProvider.deleteFeedFromGroup(user.getId(), groupKey, feedKey))
-                            .then(mqttService.unsubscribeUserFeed(user, feed));
+                            .then(userProvider.deleteFeedFromGroup(user.getId(), groupKey, fullFeedKey))
+                            .then(mqttService.unsubscribeUserFeed(user, feed))
+                            .then(feedRuleRepository.deleteByEmailAndInputFeedOrOutputFeedAboveOrOutputFeedBelow(
+                                            email, fullFeedKey, fullFeedKey, fullFeedKey)
+                                    .onErrorResume(e -> Mono.error(new RuntimeException("Failed to delete feed rules: " + e.getMessage()))))
+                            .then(scheduleService.deleteSchedulesByUserIdAndFullFeedKey(user.getId(), fullFeedKey)
+                            .onErrorResume(e -> Mono.error(new RuntimeException("Failed to delete schedules: " + e.getMessage()))));
                 });
     }
 

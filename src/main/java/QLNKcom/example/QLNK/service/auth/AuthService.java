@@ -12,6 +12,7 @@ import QLNKcom.example.QLNK.response.auth.AuthResponse;
 import QLNKcom.example.QLNK.service.adafruit.AdafruitService;
 import QLNKcom.example.QLNK.service.email.EmailService;
 import QLNKcom.example.QLNK.service.redis.RedisService;
+import QLNKcom.example.QLNK.service.scheduler.ScheduleService;
 import QLNKcom.example.QLNK.service.user.CustomReactiveUserDetailsService;
 import QLNKcom.example.QLNK.provider.user.UserProvider;
 import QLNKcom.example.QLNK.service.user.UserService;
@@ -24,7 +25,6 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.UUID;
 
@@ -40,6 +40,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final EmailService emailService;
+    private final ScheduleService scheduleService;
 
     @Value("${webapp_link}")
     private String RESET_LINK_BASE_URL;
@@ -50,8 +51,9 @@ public class AuthService {
                 .switchIfEmpty(Mono.error(new BadCredentialsException("Invalid credentials")))
                 .flatMap(userDetails -> userProvider.findByEmail(request.getEmail()))
                 .flatMap(user -> generateTokensAndCache(user)
-                        .flatMap(response-> fetchAndStoreFeeds(response, user))
-                )
+                        .flatMap(response-> fetchAndStoreFeeds(response, user)
+                                .then(scheduleService.rescheduleUserSchedules(user.getId()))
+                                .thenReturn(response)))
                 .doOnError(error -> System.err.println("❌ Error in login flow: " + error.getMessage()));
     }
 

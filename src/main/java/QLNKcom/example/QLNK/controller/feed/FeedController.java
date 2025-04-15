@@ -52,7 +52,7 @@ public class FeedController {
                 .flatMap(email -> userService.deleteFeed(email, groupKey, fullFeedKey))
                 .thenReturn(ResponseEntity.ok(
                         ResponseObject.builder()
-                                .message("Feed delete and unsubscribe successfully")
+                                .message("Feed delete with schedule and rule, unsubscribe successfully")
                                 .data(null)
                                 .status(HttpStatus.OK.value())
                                 .build()

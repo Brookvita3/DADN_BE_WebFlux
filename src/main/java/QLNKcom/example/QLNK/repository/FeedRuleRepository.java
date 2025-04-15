@@ -10,4 +10,6 @@ public interface FeedRuleRepository extends ReactiveMongoRepository<FeedRule, St
     Flux<FeedRule> findByEmail(String email);
     Mono<FeedRule> findByInputFeedAndOutputFeedAboveAndOutputFeedBelow(
             String inputFeed, String outputFeedAbove, String outputFeedBelow);
+    Mono<Void> deleteByEmailAndInputFeedOrOutputFeedAboveOrOutputFeedBelow(
+            String email, String inputFeed, String outputFeedAbove, String outputFeedBelow);
 }
