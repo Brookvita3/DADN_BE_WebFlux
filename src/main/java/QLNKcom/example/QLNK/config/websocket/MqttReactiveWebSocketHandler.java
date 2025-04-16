@@ -20,6 +20,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.security.Principal;
 import java.util.List;
 
 @Component
@@ -32,45 +33,52 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
     private final JwtUtils jwtUtils;
     private final MqttService mqttService;
     private final UserProvider userProvider;
+    private final ObjectMapper objectMapper;
+
 
     @Override
     public Mono<Void> handle(WebSocketSession session) {
-        return session.getHandshakeInfo()
-                .getPrincipal()
-                .flatMap(principal -> {
-                    String email = principal.getName();
+        log.info("Checking for authentication in session attributes");
+        return Mono.justOrEmpty(session.getAttributes().get("websocket.auth"))
+                .switchIfEmpty(Mono.error(new CustomAuthException("No principal found", HttpStatus.UNAUTHORIZED)))
+                .cast(UsernamePasswordAuthenticationToken.class)
+                .flatMap(auth -> {
+                    String email = auth.getName();
+                    log.info("Principal found: email={}", email);
                     return userProvider.findByEmail(email)
+                            .switchIfEmpty(Mono.error(new CustomAuthException("User not found", HttpStatus.UNAUTHORIZED)))
                             .map(User::getId)
                             .flatMap(userId -> establishWebSocketSession(userId, session));
                 })
-                .switchIfEmpty(Mono.error(new CustomAuthException("No principal found", HttpStatus.UNAUTHORIZED)));    }
+                .doOnError(error -> log.error("WebSocket authentication failed: {}", error.getMessage(), error));
+    }
 
-    public Mono<ServerWebExchange> handleHandshake(ServerWebExchange exchange) {
+    public Mono<UsernamePasswordAuthenticationToken> handleHandshake(ServerWebExchange exchange) {
         return extractToken(exchange)
                 .switchIfEmpty(Mono.error(new CustomAuthException("No token provided", HttpStatus.UNAUTHORIZED)))
                 .flatMap(token -> extractEmailFromToken(token)
                         .flatMap(email -> validateTokenWithRedis(token, email)))
-                .flatMap(userProvider::findByEmail)
-                .flatMap(user -> {
-                    String userId = user.getId();
-                    exchange.getAttributes().put("userId", userId);
-                    return Mono.just(new UsernamePasswordAuthenticationToken(
-                            user.getEmail(), // Principal name as email since that's what security expects
-                            null,
-                            List.of(() -> "ROLE_USER") // Add authorities if needed
-                    ));
-                })
-                .doOnSuccess(principal -> exchange.getAttributes().put("java.security.Principal", principal))
-                .thenReturn(exchange)
-                .doOnError(error -> {
-                    throw new CustomAuthException("Authentication failed", HttpStatus.UNAUTHORIZED);
-                });
+                .flatMap(email -> userProvider.findByEmail(email)
+                        .switchIfEmpty(Mono.error(new CustomAuthException("User not found", HttpStatus.UNAUTHORIZED)))
+                        .map(user -> new UsernamePasswordAuthenticationToken(
+                                user.getEmail(),
+                                null,
+                                List.of(() -> "ROLE_USER")
+                        )))
+                .doOnSuccess(auth -> log.info("Handshake successful for email: {}", auth.getName()))
+                .doOnError(error -> log.error("Handshake failed: {}", error.getMessage(), error));
     }
 
     private Mono<String> extractToken(ServerWebExchange exchange) {
-        String token = exchange.getRequest().getHeaders().getFirst("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            return Mono.just(token.substring(7));
+        String query = exchange.getRequest().getURI().getQuery();
+        if (query != null && query.contains("token=")) {
+            String[] params = query.split("&");
+            for (String param : params) {
+                if (param.startsWith("token=")) {
+                    log.info("token: {}", param.substring(6));
+                    return Mono.just(param.substring(6));  // Trả về token
+                }
+            }
         }
         return Mono.empty();
     }
@@ -106,8 +114,19 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
         sessionManager.registerSession(userId);
         log.info("✅ WebSocket connected: user {}", userId);
 
-        String type = session.getHandshakeInfo().getUri().getQuery();
-        String feed = (type != null && type.startsWith("key=")) ? type.substring(4) : null;
+        String query = session.getHandshakeInfo().getUri().getQuery();
+        String queryFeed = null;
+        if (query != null) {
+            String[] params = query.split("&");
+            for (String param : params) {
+                if (param.startsWith("key=")) {
+                    queryFeed = param.substring(4);
+                    break;
+                }
+            }
+        }
+        final String feed = queryFeed;
+        log.info("Feed key: {}", feed);
 
         // Handle incoming messages as a Flux
         Flux<Void> receiveFlux = session.receive()
@@ -138,7 +157,6 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
         log.info("📩 Received WebSocket message from {}: {}", userId, message);
 
         try {
-            ObjectMapper objectMapper = new ObjectMapper();
             JsonNode jsonNode = objectMapper.readTree(message);
 
             String value = jsonNode.get("value").asText();
@@ -154,7 +172,7 @@ public class MqttReactiveWebSocketHandler implements WebSocketHandler {
 
     private boolean shouldSendData(String json, String requestedKey) {
         try {
-            JsonNode jsonNode = new ObjectMapper().readTree(json);
+            JsonNode jsonNode = objectMapper.readTree(json);
             String key = jsonNode.get("key").asText();
             return requestedKey == null || key.equals(requestedKey);
         } catch (Exception e) {

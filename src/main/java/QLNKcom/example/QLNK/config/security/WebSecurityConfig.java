@@ -35,6 +35,7 @@ public class WebSecurityConfig {
                 .pathMatchers("/" + apiPrefix + "/user/reset-password").permitAll()
                 .pathMatchers("/" + apiPrefix + "/auth/logout").authenticated()
                 .pathMatchers("/" + apiPrefix + "/**").authenticated()
+                .pathMatchers("/ws").permitAll()
                 .anyExchange().authenticated()
         );
         http.addFilterBefore(jwtAuthenticationFilter, SecurityWebFiltersOrder.AUTHENTICATION);

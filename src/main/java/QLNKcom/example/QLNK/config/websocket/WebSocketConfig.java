@@ -1,8 +1,10 @@
 package QLNKcom.example.QLNK.config.websocket;
 
 import QLNKcom.example.QLNK.exception.CustomAuthException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.HandlerMapping;
 import org.springframework.web.reactive.handler.SimpleUrlHandlerMapping;
 import org.springframework.web.reactive.socket.WebSocketHandler;
@@ -15,6 +17,7 @@ import reactor.core.publisher.Mono;
 import java.util.Map;
 
 @Configuration
+@Slf4j
 public class WebSocketConfig {
 
     @Bean
@@ -26,20 +29,31 @@ public class WebSocketConfig {
     }
 
     @Bean
-    public WebSocketHandlerAdapter webSocketHandlerAdapter() {
+    public WebSocketHandlerAdapter webSocketHandlerAdapter(MqttReactiveWebSocketHandler mqttHandler) {
         ReactorNettyRequestUpgradeStrategy upgradeStrategy = new ReactorNettyRequestUpgradeStrategy();
         HandshakeWebSocketService webSocketService = new HandshakeWebSocketService(upgradeStrategy) {
             @Override
             public Mono<Void> handleRequest(ServerWebExchange exchange, WebSocketHandler webSocketHandler) {
-                if (webSocketHandler instanceof MqttReactiveWebSocketHandler mqttHandler) {
+                log.info("Handling WebSocket handshake for URI: {}", exchange.getRequest().getURI());
+                if (webSocketHandler instanceof MqttReactiveWebSocketHandler) {
                     return mqttHandler.handleHandshake(exchange)
-                            .then(super.handleRequest(exchange, webSocketHandler))
+                            .flatMap(authentication -> {
+                                log.info("Handshake successful, principal: {}", authentication.getName());
+                                // Gọi handler và lưu authentication vào session attributes
+                                return super.handleRequest(exchange, session -> {
+                                    log.info("Storing authentication in session for email: {}", authentication.getName());
+                                    session.getAttributes().put("websocket.auth", authentication);
+                                    return webSocketHandler.handle(session);
+                                });
+                            })
                             .onErrorResume(throwable -> {
+                                log.error("Handshake failed: {}", throwable.getMessage(), throwable);
                                 if (throwable instanceof CustomAuthException customAuthException) {
                                     exchange.getResponse().setStatusCode(customAuthException.getHttpStatus());
                                     return exchange.getResponse().setComplete();
                                 }
-                                return Mono.error(throwable);
+                                exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
+                                return exchange.getResponse().setComplete();
                             });
                 }
                 return super.handleRequest(exchange, webSocketHandler);
