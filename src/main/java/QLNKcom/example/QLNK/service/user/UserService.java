@@ -301,6 +301,7 @@ public class UserService {
                                     feedRule.getInputFeed(),
                                     feedRule.getOutputFeedAbove(),
                                     feedRule.getOutputFeedBelow())
+                            .filter(existingRule -> !existingRule.getId().equals(feedRule.getId()))
                             .hasElement()
                             .flatMap(hasDuplicate -> {
                                 if (hasDuplicate) {

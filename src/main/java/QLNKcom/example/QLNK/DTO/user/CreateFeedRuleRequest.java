@@ -12,11 +12,11 @@ public class CreateFeedRuleRequest {
     private String inputFeed;
 
     @NotNull(message = "Ceiling must not be null")
-    @Positive(message = "Ceiling must be a positive number")
+    @PositiveOrZero(message = "Ceiling must be a positive number")
     private Double ceiling;
 
     @NotNull(message = "Floor must not be null")
-    @Positive(message = "Floor must be a positive number")
+    @PositiveOrZero(message = "Floor must be a positive number")
     private Double floor;
 
     @NotBlank(message = "Output feed for above ceiling must not be blank")

@@ -41,7 +41,7 @@ public class WebSocketConfig {
                                 log.info("Handshake successful, principal: {}", authentication.getName());
                                 // Gọi handler và lưu authentication vào session attributes
                                 return super.handleRequest(exchange, session -> {
-                                    log.info("Storing authentication in session for email: {}", authentication.getName());
+                                    log.info("Storing authentication in session for email:  {}", authentication.getName());
                                     session.getAttributes().put("websocket.auth", authentication);
                                     return webSocketHandler.handle(session);
                                 });

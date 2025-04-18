@@ -3,6 +3,7 @@ package QLNKcom.example.QLNK.DTO.user;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
 
 @Data
@@ -11,11 +12,11 @@ public class UpdateFeedRuleRequest {
     private String inputFeed;
 
     @NotNull(message = "Ceiling must not be null")
-    @Positive(message = "Ceiling must be a positive number")
+    @PositiveOrZero(message = "Ceiling must be a positive number")
     private Double ceiling;
 
     @NotNull(message = "Floor must not be null")
-    @Positive(message = "Floor must be a positive number")
+    @PositiveOrZero(message = "Floor must be a positive number")
     private Double floor;
 
     @NotBlank(message = "Output feed for above ceiling must not be blank")
@@ -25,10 +26,10 @@ public class UpdateFeedRuleRequest {
     private String outputFeedBelow;
 
     @NotNull(message = "Value for above ceiling must not be blank")
-    @Positive(message = "AboveValue must be a positive number")
+    @PositiveOrZero(message = "AboveValue must be a positive number")
     private Double aboveValue;
 
     @NotNull(message = "Value for below floor must not be blank")
-    @Positive(message = "BelowValue must be a positive number")
+    @PositiveOrZero(message = "BelowValue must be a positive number")
     private Double belowValue;
 }
