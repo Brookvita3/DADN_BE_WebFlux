@@ -4,11 +4,13 @@ import QLNKcom.example.QLNK.enums.ScheduleType;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
 
 @Data
 public class CreateScheduleRequest {
     @NotNull(message = "Value is required")
+    @PositiveOrZero
     private Double value;
 
     @NotNull(message = "Type is required")
@@ -17,7 +19,6 @@ public class CreateScheduleRequest {
     @NotBlank(message = "Time is required")
     private String time;
 
-    @NotBlank(message = "Note is required")
     private String note;
 
     private Integer day;

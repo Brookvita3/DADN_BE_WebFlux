@@ -8,6 +8,7 @@ import QLNKcom.example.QLNK.DTO.user.CreateFeedRuleRequest;
 import QLNKcom.example.QLNK.DTO.user.RegisterRequest;
 import QLNKcom.example.QLNK.DTO.user.UpdateFeedRuleRequest;
 import QLNKcom.example.QLNK.DTO.user.UpdateInfoRequest;
+import QLNKcom.example.QLNK.enums.FeedState;
 import QLNKcom.example.QLNK.exception.CustomAuthException;
 import QLNKcom.example.QLNK.exception.DataDuplicateException;
 import QLNKcom.example.QLNK.exception.DataNotFoundException;
@@ -123,6 +124,7 @@ public class UserService {
                                     .belowValue(request.getBelowValue())
                                     .outputFeedAbove(request.getOutputFeedAbove())
                                     .outputFeedBelow(request.getOutputFeedBelow())
+                                    .state(FeedState.NORMAL)
                                     .build();
                             return feedRuleRepository.save(newFeedRule);
                         }));

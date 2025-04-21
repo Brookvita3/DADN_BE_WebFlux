@@ -1,5 +1,6 @@
 package QLNKcom.example.QLNK.model.data;
 
+import QLNKcom.example.QLNK.enums.FeedState;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,7 +27,5 @@ public class FeedRule {
     private Double aboveValue;
     private Double belowValue;
     private String email;
-
-    private Long lastViolationTime;
-    private Boolean continuousViolation;
+    private FeedState state;
 }
