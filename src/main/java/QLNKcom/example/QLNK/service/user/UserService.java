@@ -124,7 +124,8 @@ public class UserService {
                                     .belowValue(request.getBelowValue())
                                     .outputFeedAbove(request.getOutputFeedAbove())
                                     .outputFeedBelow(request.getOutputFeedBelow())
-                                    .state(FeedState.NORMAL)
+                                    .aboveState(FeedState.NORMAL)
+                                    .belowState(FeedState.NORMAL)
                                     .build();
                             return feedRuleRepository.save(newFeedRule);
                         }));

@@ -168,50 +168,68 @@ public class MqttMessageHandler {
         }
 
 
-        // Update state and check send Mqtt message
-        Mono<Void> updateMono = Mono.just(value)
+        // Update states and send MQTT message based on value
+        Mono<Void> mqttMono = Mono.just(value)
                 .flatMap(currentValue -> {
-                    if (ceiling != null && currentValue > ceiling) {
-                        feed.setState(FeedState.VIOLATING_ABOVE);
+                    Mono<Void> aboveMono = Mono.empty();
+                    Mono<Void> belowMono = Mono.empty();
+
+                    // Handle value > ceiling
+                    if (ceiling != null && currentValue > ceiling && feed.getOutputFeedAbove() != null) {
+                        feed.setAboveState(FeedState.VIOLATING);
                         String topic = user.getUsername() + "/feeds/" + feed.getOutputFeedAbove();
-                        String aboveValueStr = feed.getAboveValue().toString();
-                        return mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedAbove(), aboveValueStr)
+                        String aboveValueStr = feed.getAboveValue() != null ? feed.getAboveValue().toString() : "1.0";
+                        aboveMono = mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedAbove(), aboveValueStr)
                                 .doOnSuccess(v -> log.info("Sent MQTT adjustment to {}: {} (value: {} > ceiling: {})",
-                                        topic, feed.getAboveValue(), currentValue, ceiling));
+                                        topic, aboveValueStr, currentValue, ceiling));
                     }
-                    else if (floor != null && currentValue < floor) {
-                        feed.setState(FeedState.VIOLATING_BELOW);
+
+                    // Handle value < floor
+                    if (floor != null && currentValue < floor && feed.getOutputFeedBelow() != null) {
+                        feed.setBelowState(FeedState.VIOLATING);
                         String topic = user.getUsername() + "/feeds/" + feed.getOutputFeedBelow();
-                        String belowValueStr = feed.getBelowValue().toString();
-                        return mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedBelow(), belowValueStr)
+                        String belowValueStr = feed.getBelowValue() != null ? feed.getBelowValue().toString() : "1.0";
+                        belowMono = mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedBelow(), belowValueStr)
                                 .doOnSuccess(v -> log.info("Sent MQTT adjustment to {}: {} (value: {} < floor: {})",
-                                        topic, feed.getBelowValue(), currentValue, floor));
+                                        topic, belowValueStr, currentValue, floor));
                     }
-                    else if (floor != null && ceiling != null) {
-                        if (feed.getState() == FeedState.NORMAL) return Mono.empty();
-                        else if (feed.getState() == FeedState.VIOLATING_ABOVE) {
+
+                    // If value is not above ceiling, check aboveState to send !aboveValue
+                    if (ceiling != null && currentValue <= ceiling && feed.getOutputFeedAbove() != null) {
+                        if (feed.getAboveState() == FeedState.VIOLATING) {
                             String topic = user.getUsername() + "/feeds/" + feed.getOutputFeedAbove();
                             String invertValueStr = (feed.getAboveValue() != null && feed.getAboveValue() == 1.0) ? "0.0" : "1.0";
-                            return mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedBelow(), invertValueStr)
-                                    .doOnSuccess(v -> log.info("Sent MQTT adjustment to {}: {} (value: {} is normal, was VIOLATING_ABOVE)",
+                            aboveMono = mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedAbove(), invertValueStr)
+                                    .doOnSuccess(v -> log.info("Sent MQTT adjustment to {}: {} (value: {} not above ceiling, was VIOLATING above)",
                                             topic, invertValueStr, currentValue))
-                                    .then(Mono.fromRunnable(() -> feed.setState(FeedState.NORMAL)));
-                        }
-                        else {
-                            String topic = user.getUsername() + "/feeds/" + feed.getOutputFeedBelow();
-                            String invertValueStr = (feed.getBelowValue() != null && feed.getBelowValue() == 1.0) ? "0.0" : "1.0";
-                            return mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedBelow(), invertValueStr)
-                                    .doOnSuccess(v -> log.info("Sent MQTT adjustment to {}: {} (value: {} is normal, was VIOLATING_BELOW)",
-                                            topic, invertValueStr, currentValue))
-                                    .then(Mono.fromRunnable(() -> feed.setState(FeedState.NORMAL)));
+                                    .then(Mono.fromRunnable(() -> feed.setAboveState(FeedState.NORMAL)));
+                        } else {
+                            feed.setAboveState(FeedState.NORMAL);
                         }
                     }
-                    return Mono.empty();
-                })
+
+                    // If value is not below floor, check belowState to send !belowValue
+                    if (floor != null && currentValue >= floor && feed.getOutputFeedBelow() != null) {
+                        if (feed.getBelowState() == FeedState.VIOLATING) {
+                            String topic = user.getUsername() + "/feeds/" + feed.getOutputFeedBelow();
+                            String invertValueStr = (feed.getBelowValue() != null && feed.getBelowValue() == 1.0) ? "0.0" : "1.0";
+                            belowMono = mqttCommandService.sendMqttCommand(user.getId(), feed.getOutputFeedBelow(), invertValueStr)
+                                    .doOnSuccess(v -> log.info("Sent MQTT adjustment to {}: {} (value: {} not below floor, was VIOLATING below)",
+                                            topic, invertValueStr, currentValue))
+                                    .then(Mono.fromRunnable(() -> feed.setBelowState(FeedState.NORMAL)));
+                        } else {
+                            feed.setBelowState(FeedState.NORMAL);
+                        }
+                    }
+
+                    // Combine above and below operations
+                    return aboveMono.then(belowMono);
+                });
+
+        return emailMono
+                .then(mqttMono)
                 .then(feedRuleRepository.save(feed))
                 .then();
-
-        return emailMono.then(updateMono);
     }
 
     public void attachHandler(MqttPahoMessageDrivenChannelAdapter adapter, User user) {

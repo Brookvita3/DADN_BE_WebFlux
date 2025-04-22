@@ -27,5 +27,6 @@ public class FeedRule {
     private Double aboveValue;
     private Double belowValue;
     private String email;
-    private FeedState state;
+    private FeedState aboveState;
+    private FeedState belowState;
 }
