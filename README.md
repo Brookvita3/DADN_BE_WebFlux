@@ -98,5 +98,4 @@ docker exec -it redis redis-cli ping
 Nếu nhận được PONG, Redis đã hoạt động.
 
 ## API documentation
-
-API documentation có thể tải về tại [đây](https://github.com/Brookvita3/DADN_BE_WebFlux/blob/main/DA_CNPM.postman_collection.json) và import vào Postman.
+API documentation có thể tải về tại [đây](https://github.com/Brookvita3/DADN_BE_WebFlux/blob/main/DADN.postman_collection.json) và import vào Postman.
